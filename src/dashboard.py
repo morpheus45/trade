@@ -239,5 +239,6 @@ def static_files(filename):
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Accessible sur le réseau local → port sur Android via IP du PC
-    app.run(debug=False, host="0.0.0.0", port=5000, threaded=True)
+    # Railway/Render injectent PORT via variable d'environnement
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port, threaded=True)

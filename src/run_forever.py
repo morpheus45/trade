@@ -73,13 +73,10 @@ def _start_process(name: str, script: Path) -> subprocess.Popen:
     log_file = LOG_DIR / f"{name}.log"
     log_fh   = open(log_file, "a", encoding="utf-8", buffering=1)
 
-    proc = subprocess.Popen(
-        [PYTHON, str(script)],
-        cwd=str(SRC_DIR),
-        stdout=log_fh,
-        stderr=log_fh,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-    )
+    kwargs = dict(cwd=str(SRC_DIR), stdout=log_fh, stderr=log_fh)
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    proc = subprocess.Popen([PYTHON, str(script)], **kwargs)
     logger.info(f"[{name}] Démarré (PID {proc.pid}) → log: {log_file}")
     return proc
 

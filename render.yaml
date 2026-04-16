@@ -1,0 +1,42 @@
+services:
+  # Bot de trading principal (worker — tourne en fond H24)
+  - type: worker
+    name: trading-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/run_forever.py
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: API_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAPER_TRADING
+        value: "true"
+    autoDeploy: true
+
+  # Dashboard PWA (web — accessible depuis Android)
+  - type: web
+    name: trading-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/dashboard.py
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: API_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAPER_TRADING
+        value: "true"
+    autoDeploy: true
