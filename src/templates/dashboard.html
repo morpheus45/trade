@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Trading Bot</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149; --yellow: #d29922; --blue: #58a6ff;
+      --radius: 12px;
+    }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:14px; min-height:100vh; padding-bottom:80px; }
+    .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+    .header h1 { font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .status-dot { width:9px; height:9px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+    .status-dot.paused { background:var(--yellow); animation:none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .mode-badge { font-size:11px; padding:3px 8px; border-radius:20px; font-weight:600; }
+    .mode-paper { background:rgba(88,166,255,.15); color:var(--blue); }
+    .mode-live  { background:rgba(248,81,73,.15); color:var(--red); }
+    .container { padding:16px; max-width:600px; margin:0 auto; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+    .card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:12px; }
+    .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    @media(min-width:480px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
+    .kpi { background:var(--bg); border-radius:8px; padding:12px; text-align:center; }
+    .kpi-label { font-size:11px; color:var(--muted); margin-bottom:4px; }
+    .kpi-value { font-size:22px; font-weight:700; }
+    .kpi-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+    .pos { color:var(--green); } .neg { color:var(--red); } .neu { color:var(--text); }
+    .chart-wrap { position:relative; height:180px; }
+    .stats-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .stat-item { flex:1; min-width:100px; background:var(--bg); border-radius:8px; padding:10px; text-align:center; }
+    .stat-label { font-size:10px; color:var(--muted); }
+    .stat-value { font-size:17px; font-weight:700; margin-top:2px; }
+    .position-item { background:var(--bg); border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+    .position-pair { font-weight:600; font-size:15px; }
+    .position-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+    .pnl-value { font-size:16px; font-weight:700; }
+    .badge { display:inline-block; font-size:10px; padding:2px 6px; border-radius:10px; margin-left:6px; }
+    .badge-trail { background:rgba(63,185,80,.2); color:var(--green); }
+    .badge-tp1   { background:rgba(88,166,255,.2); color:var(--blue); }
+    .trade-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); }
+    .trade-row:last-child { border-bottom:none; }
+    .trade-pair { font-weight:600; }
+    .trade-info { font-size:11px; color:var(--muted); }
+    .trade-pnl { font-weight:700; text-align:right; }
+    .empty { color:var(--muted); text-align:center; padding:24px; }
+    .tab { display:none; }
+    .tab.active { display:block; }
+    .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); display:flex; z-index:100; }
+    .nav-item { flex:1; padding:10px 4px; text-align:center; cursor:pointer; font-size:10px; color:var(--muted); border:none; background:none; }
+    .nav-item.active { color:var(--blue); }
+    .nav-icon { font-size:20px; display:block; margin-bottom:2px; }
+  </style>
+</head>
+<body>
+<header class="header">
+  <h1><span class="status-dot" id="statusDot"></span>Trading Bot</h1>
+  <span class="mode-badge" id="modeBadge"></span>
+</header>
+
+<div class="container">
+  <!-- Accueil -->
+  <div class="tab active" id="tab-home">
+    <div class="card">
+      <div class="card-title">Capital</div>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Actuel</div><div class="kpi-value neu" id="kpiCapital">—</div><div class="kpi-sub">USDT</div></div>
+        <div class="kpi"><div class="kpi-label">P&L total</div><div class="kpi-value" id="kpiPnl">—</div><div class="kpi-sub" id="kpiRoi">—</div></div>
+        <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value neu" id="kpiPositions">—</div><div class="kpi-sub" id="kpiMaxPos">—</div></div>
+        <div class="kpi"><div class="kpi-label">Win rate</div><div class="kpi-value" id="kpiWinrate">—</div><div class="kpi-sub" id="kpiTrades">—</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Courbe de performance</div>
+      <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Statistiques</div>
+      <div class="stats-row">
+        <div class="stat-item"><div class="stat-label">Profit Factor</div><div class="stat-value" id="statPF">—</div></div>
+        <div class="stat-item"><div class="stat-label">Avg Win</div><div class="stat-value pos" id="statAvgWin">—</div></div>
+        <div class="stat-item"><div class="stat-label">Avg Loss</div><div class="stat-value neg" id="statAvgLoss">—</div></div>
+        <div class="stat-item"><div class="stat-label">Expectancy</div><div class="stat-value" id="statExp">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Positions -->
+  <div class="tab" id="tab-positions">
+    <div class="card">
+      <div class="card-title">Positions ouvertes</div>
+      <div id="positionsList"><div class="empty">Aucune position</div></div>
+    </div>
+  </div>
+
+  <!-- Trades -->
+  <div class="tab" id="tab-trades">
+    <div class="card">
+      <div class="card-title">Derniers trades</div>
+      <div id="tradesList"><div class="empty">Aucun trade</div></div>
+    </div>
+  </div>
+
+  <!-- Infos -->
+  <div class="tab" id="tab-info">
+    <div class="card">
+      <div class="card-title">Configuration</div>
+      <div id="infoContent" style="line-height:2">Chargement...</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Dernière mise à jour</div>
+      <div id="lastUpdate" style="color:var(--muted);font-size:12px">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchTab('home',this)"><span class="nav-icon">📊</span>Accueil</button>
+  <button class="nav-item" onclick="switchTab('positions',this)"><span class="nav-icon">📈</span>Positions</button>
+  <button class="nav-item" onclick="switchTab('trades',this)"><span class="nav-icon">🔄</span>Trades</button>
+  <button class="nav-item" onclick="switchTab('info',this)"><span class="nav-icon">ℹ️</span>Infos</button>
+</nav>
+
+<script>
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+let equityChart = null;
+function initChart(labels, data) {
+  const ctx = document.getElementById('equityChart').getContext('2d');
+  if (equityChart) equityChart.destroy();
+  const positive = data.length > 1 && data[data.length-1] >= data[0];
+  const color = positive ? '#3fb950' : '#f85149';
+  equityChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{ data, borderColor:color, borderWidth:2, fill:true,
+      backgroundColor: positive ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)',
+      pointRadius:0, tension:0.3 }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>c.parsed.y.toFixed(2)+' USDT' }}},
+      scales:{ x:{display:false}, y:{ grid:{color:'rgba(48,54,61,.5)'}, ticks:{color:'#8b949e',font:{size:10}} }}}
+  });
+}
+
+function fmtPnl(v) {
+  const c = v>0?'pos':v<0?'neg':'neu';
+  return `<span class="${c}">${v>=0?'+':''}${v.toFixed(2)}</span>`;
+}
+
+async function refresh() {
+  try {
+    const d = await fetch('/api/data').then(r=>r.json());
+
+    // Status
+    document.getElementById('statusDot').className = 'status-dot'+(d.paused?' paused':'');
+    const badge = document.getElementById('modeBadge');
+    badge.className = 'mode-badge '+(d.paper?'mode-paper':'mode-live');
+    badge.textContent = d.paper ? '📄 PAPER' : '🔴 LIVE';
+
+    // KPIs
+    const pnl = d.total_value - d.initial_capital;
+    const roi = d.initial_capital > 0 ? pnl/d.initial_capital*100 : 0;
+    document.getElementById('kpiCapital').textContent = d.total_value.toFixed(2);
+    document.getElementById('kpiPnl').innerHTML = fmtPnl(pnl);
+    document.getElementById('kpiRoi').textContent = (roi>=0?'+':'')+roi.toFixed(2)+'%';
+    document.getElementById('kpiPositions').textContent = d.open_positions+'/'+d.max_positions;
+    document.getElementById('kpiWinrate').textContent = (d.stats.win_rate_pct||0).toFixed(1)+'%';
+    document.getElementById('kpiTrades').textContent = (d.stats.trades||0)+' trades';
+
+    // Stats
+    document.getElementById('statPF').textContent = (d.stats.profit_factor||0).toFixed(2);
+    document.getElementById('statAvgWin').textContent = '+'+(d.stats.avg_win||0).toFixed(2);
+    document.getElementById('statAvgLoss').textContent = (d.stats.avg_loss||0).toFixed(2);
+    const expEl = document.getElementById('statExp');
+    expEl.textContent = (d.stats.expectancy||0).toFixed(3);
+    expEl.className = 'stat-value '+((d.stats.expectancy||0)>=0?'pos':'neg');
+
+    // Chart
+    if (d.portfolio_history && d.portfolio_history.length > 1) {
+      initChart(d.portfolio_history.map(p=>p.time), d.portfolio_history.map(p=>p.value));
+    }
+
+    // Positions
+    const posDiv = document.getElementById('positionsList');
+    if (!d.positions || !d.positions.length) {
+      posDiv.innerHTML = '<div class="empty">Aucune position ouverte</div>';
+    } else {
+      posDiv.innerHTML = d.positions.map(p => {
+        const cls = p.unrealized_pnl>=0?'pos':'neg';
+        const trail = p.trailing_active ? '<span class="badge badge-trail">TRAIL</span>' : '';
+        const tp1   = p.partial_done    ? '<span class="badge badge-tp1">TP1✓</span>' : '';
+        return `<div class="position-item">
+          <div>
+            <div class="position-pair">${p.pair}${trail}${tp1}</div>
+            <div class="position-meta">${p.qty_remaining.toFixed(4)} @ ${p.entry_price.toFixed(4)} · SL:${p.stop_price.toFixed(4)}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="pnl-value ${cls}">${p.unrealized_pnl>=0?'+':''}${p.unrealized_pnl.toFixed(2)}$</div>
+            <div style="font-size:11px;color:var(--muted)">${p.unrealized_pnl_pct>=0?'+':''}${p.unrealized_pnl_pct.toFixed(2)}%</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // Trades
+    const tDiv = document.getElementById('tradesList');
+    if (!d.recent_trades || !d.recent_trades.length) {
+      tDiv.innerHTML = '<div class="empty">Aucun trade terminé</div>';
+    } else {
+      tDiv.innerHTML = d.recent_trades.slice(0,20).map(t => {
+        const cls = t.pnl_usdt>=0?'pos':'neg';
+        return `<div class="trade-row">
+          <div><div class="trade-pair">${t.pair}</div><div class="trade-info">${t.reason} · ${t.duration_min}min</div></div>
+          <div class="trade-pnl ${cls}">${t.pnl_usdt>=0?'+':''}${t.pnl_usdt.toFixed(2)} USDT<div class="trade-info">${t.pnl_pct>=0?'+':''}${t.pnl_pct.toFixed(2)}%</div></div>
+        </div>`;
+      }).join('');
+    }
+
+    // Infos
+    document.getElementById('infoContent').innerHTML = `
+      <div>Paires: <strong>${(d.pairs||[]).join(', ')}</strong></div>
+      <div>Risque/trade: <strong>${((d.risk_pct||0)*100).toFixed(1)}%</strong></div>
+      <div>Trailing stop: <strong>✅ actif</strong></div>
+      <div>TP partiel: <strong>✅ 50% au 1er TP</strong></div>
+      <div>ML XGBoost: <strong>${d.ml_loaded?'✅ chargé':'⚠️ non entraîné'}</strong></div>
+      <div>Claude AI: <strong>${d.claude_active?'✅ actif':'⚠️ désactivé'}</strong></div>
+    `;
+    document.getElementById('lastUpdate').textContent = 'Mis à jour : '+new Date().toLocaleTimeString();
+  } catch(e) { console.error('Refresh error:', e); }
+}
+
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+}
+
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+# Credentials — JAMAIS dans git
+src/.env
+*.env
+
+# Modèle ML (généré localement par train_xgboost.py)
+models/
+!models/.gitkeep
+
+# Installeurs et logiciels
+logiciels/
+
+# Logs et données
+logs/
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environnements virtuels
+venv/
+env/
+.venv/
+
+# OS
+.DS_Store
+desktop.ini
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Capital initial (info privée)
+initial_capital.txt

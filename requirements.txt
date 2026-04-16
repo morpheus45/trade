@@ -1,0 +1,10 @@
+# Bot de trading — dépendances Python
+ccxt>=4.2.0
+pandas>=2.0.0
+numpy>=1.24.0
+xgboost>=2.0.0
+scikit-learn>=1.3.0
+flask>=3.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+anthropic>=0.40.0
