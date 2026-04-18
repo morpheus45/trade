@@ -14,67 +14,136 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0d1117; --surface: #161b22; --border: #30363d;
+      --bg: #0d1117; --surface: #161b22; --surface2: #21262d; --border: #30363d;
       --text: #e6edf3; --muted: #8b949e;
       --green: #3fb950; --red: #f85149; --yellow: #d29922; --blue: #58a6ff;
-      --radius: 12px;
+      --purple: #bc8cff; --radius: 12px;
     }
-    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:14px; min-height:100vh; padding-bottom:80px; }
-    .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
-    .header h1 { font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
-    .status-dot { width:9px; height:9px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:14px; min-height:100vh; padding-bottom:64px; }
+
+    /* Header */
+    .header { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+    .header h1 { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .status-dot { width:9px; height:9px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; flex-shrink:0; }
     .status-dot.paused { background:var(--yellow); animation:none; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
     .mode-badge { font-size:11px; padding:3px 8px; border-radius:20px; font-weight:600; }
     .mode-paper { background:rgba(88,166,255,.15); color:var(--blue); }
     .mode-live  { background:rgba(248,81,73,.15); color:var(--red); }
-    .container { padding:16px; max-width:600px; margin:0 auto; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
-    .card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:12px; }
-    .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    /* Layout */
+    .container { padding:12px 16px; max-width:640px; margin:0 auto; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+    .card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:10px; }
+
+    /* KPIs */
+    .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     @media(min-width:480px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
-    .kpi { background:var(--bg); border-radius:8px; padding:12px; text-align:center; }
-    .kpi-label { font-size:11px; color:var(--muted); margin-bottom:4px; }
-    .kpi-value { font-size:22px; font-weight:700; }
-    .kpi-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+    .kpi { background:var(--bg); border-radius:8px; padding:10px; text-align:center; }
+    .kpi-label { font-size:10px; color:var(--muted); margin-bottom:3px; }
+    .kpi-value { font-size:20px; font-weight:700; }
+    .kpi-sub { font-size:11px; color:var(--muted); margin-top:2px; }
     .pos { color:var(--green); } .neg { color:var(--red); } .neu { color:var(--text); }
-    .chart-wrap { position:relative; height:180px; }
-    .stats-row { display:flex; gap:8px; flex-wrap:wrap; }
-    .stat-item { flex:1; min-width:100px; background:var(--bg); border-radius:8px; padding:10px; text-align:center; }
+
+    /* Chart */
+    .chart-wrap { position:relative; height:160px; }
+
+    /* Stats */
+    .stats-row { display:flex; gap:6px; flex-wrap:wrap; }
+    .stat-item { flex:1; min-width:80px; background:var(--bg); border-radius:8px; padding:8px; text-align:center; }
     .stat-label { font-size:10px; color:var(--muted); }
-    .stat-value { font-size:17px; font-weight:700; margin-top:2px; }
+    .stat-value { font-size:16px; font-weight:700; margin-top:2px; }
+
+    /* Positions */
     .position-item { background:var(--bg); border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
-    .position-pair { font-weight:600; font-size:15px; }
+    .position-pair { font-weight:600; font-size:14px; }
     .position-meta { font-size:11px; color:var(--muted); margin-top:2px; }
-    .pnl-value { font-size:16px; font-weight:700; }
-    .badge { display:inline-block; font-size:10px; padding:2px 6px; border-radius:10px; margin-left:6px; }
+    .pnl-value { font-size:15px; font-weight:700; }
+    .badge { display:inline-block; font-size:10px; padding:2px 5px; border-radius:8px; margin-left:4px; }
     .badge-trail { background:rgba(63,185,80,.2); color:var(--green); }
     .badge-tp1   { background:rgba(88,166,255,.2); color:var(--blue); }
+
+    /* Trades */
     .trade-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); }
     .trade-row:last-child { border-bottom:none; }
     .trade-pair { font-weight:600; }
     .trade-info { font-size:11px; color:var(--muted); }
     .trade-pnl { font-weight:700; text-align:right; }
-    .empty { color:var(--muted); text-align:center; padding:24px; }
+    .empty { color:var(--muted); text-align:center; padding:24px; font-size:13px; }
+
+    /* Tabs */
     .tab { display:none; }
     .tab.active { display:block; }
     .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); display:flex; z-index:100; }
-    .nav-item { flex:1; padding:10px 4px; text-align:center; cursor:pointer; font-size:10px; color:var(--muted); border:none; background:none; }
+    .nav-item { flex:1; padding:8px 2px; text-align:center; cursor:pointer; font-size:10px; color:var(--muted); border:none; background:none; transition:color .2s; }
     .nav-item.active { color:var(--blue); }
-    .nav-icon { font-size:20px; display:block; margin-bottom:2px; }
+    .nav-icon { font-size:18px; display:block; margin-bottom:2px; }
+
+    /* ═══════════════════════════════════════════
+       CHAT IA
+    ═══════════════════════════════════════════ */
+    #tab-chat { display:none; flex-direction:column; height:calc(100vh - 64px - 56px); }
+    #tab-chat.active { display:flex; padding:0; }
+    .chat-header { padding:10px 16px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .chat-header-title { font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px; }
+    .chat-ai-dot { width:8px; height:8px; border-radius:50%; background:var(--purple); animation:pulse 2s infinite; }
+    .chat-clear-btn { font-size:11px; color:var(--muted); background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:6px; }
+    .chat-clear-btn:hover { background:var(--surface2); color:var(--text); }
+
+    .chat-messages { flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:10px; }
+    .chat-messages::-webkit-scrollbar { width:4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+    .msg { display:flex; flex-direction:column; max-width:85%; }
+    .msg.user { align-self:flex-end; align-items:flex-end; }
+    .msg.ai   { align-self:flex-start; align-items:flex-start; }
+    .msg-bubble { padding:10px 14px; border-radius:16px; font-size:13px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+    .msg.user .msg-bubble { background:var(--blue); color:#fff; border-bottom-right-radius:4px; }
+    .msg.ai   .msg-bubble { background:var(--surface2); color:var(--text); border-bottom-left-radius:4px; border:1px solid var(--border); }
+    .msg-time { font-size:10px; color:var(--muted); margin-top:3px; padding:0 4px; }
+    .msg-sender { font-size:10px; color:var(--purple); font-weight:600; margin-bottom:3px; padding:0 4px; }
+
+    .typing-indicator { display:none; align-self:flex-start; }
+    .typing-indicator.visible { display:flex; }
+    .typing-bubble { background:var(--surface2); border:1px solid var(--border); border-radius:16px; border-bottom-left-radius:4px; padding:12px 16px; display:flex; gap:4px; align-items:center; }
+    .typing-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:typingBounce 1.2s infinite; }
+    .typing-dot:nth-child(2) { animation-delay:.2s; }
+    .typing-dot:nth-child(3) { animation-delay:.4s; }
+    @keyframes typingBounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+    .chat-welcome { text-align:center; padding:24px 16px; color:var(--muted); }
+    .chat-welcome-icon { font-size:40px; margin-bottom:8px; }
+    .chat-welcome h3 { color:var(--text); margin-bottom:6px; font-size:15px; }
+    .chat-welcome p { font-size:12px; line-height:1.6; }
+    .chat-suggestions { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:12px; }
+    .chat-suggestion { background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:12px; cursor:pointer; color:var(--text); }
+    .chat-suggestion:hover { border-color:var(--blue); color:var(--blue); }
+
+    .chat-input-wrap { padding:10px 12px; background:var(--surface); border-top:1px solid var(--border); display:flex; gap:8px; align-items:flex-end; }
+    .chat-input { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:10px 14px; color:var(--text); font-size:13px; resize:none; outline:none; max-height:120px; min-height:40px; font-family:inherit; line-height:1.4; }
+    .chat-input:focus { border-color:var(--blue); }
+    .chat-send-btn { width:38px; height:38px; border-radius:50%; background:var(--blue); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background .2s; }
+    .chat-send-btn:hover { background:#79b8ff; }
+    .chat-send-btn:disabled { background:var(--border); cursor:not-allowed; }
+    .chat-send-btn svg { width:16px; height:16px; fill:#fff; }
   </style>
 </head>
 <body>
+
 <header class="header">
   <h1><span class="status-dot" id="statusDot"></span>Trading Bot</h1>
-  <span class="mode-badge" id="modeBadge"></span>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font-size:11px;color:var(--muted)" id="lastUpdateHeader">—</span>
+    <span class="mode-badge" id="modeBadge"></span>
+  </div>
 </header>
 
 <div class="container">
-  <!-- Accueil -->
+
+  <!-- ══ ACCUEIL ══════════════════════════════════════════════ -->
   <div class="tab active" id="tab-home">
     <div class="card">
-      <div class="card-title">Capital</div>
+      <div class="card-title">💰 Capital</div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Actuel</div><div class="kpi-value neu" id="kpiCapital">—</div><div class="kpi-sub">USDT</div></div>
         <div class="kpi"><div class="kpi-label">P&L total</div><div class="kpi-value" id="kpiPnl">—</div><div class="kpi-sub" id="kpiRoi">—</div></div>
@@ -83,11 +152,11 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title">Courbe de performance</div>
+      <div class="card-title">📈 Courbe de performance</div>
       <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">Statistiques</div>
+      <div class="card-title">📊 Statistiques</div>
       <div class="stats-row">
         <div class="stat-item"><div class="stat-label">Profit Factor</div><div class="stat-value" id="statPF">—</div></div>
         <div class="stat-item"><div class="stat-label">Avg Win</div><div class="stat-value pos" id="statAvgWin">—</div></div>
@@ -95,125 +164,170 @@
         <div class="stat-item"><div class="stat-label">Expectancy</div><div class="stat-value" id="statExp">—</div></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">⚙️ Système</div>
+      <div id="infoContent" style="line-height:2;font-size:13px">Chargement...</div>
+    </div>
   </div>
 
-  <!-- Positions -->
+  <!-- ══ POSITIONS ════════════════════════════════════════════ -->
   <div class="tab" id="tab-positions">
     <div class="card">
-      <div class="card-title">Positions ouvertes</div>
+      <div class="card-title">📊 Positions ouvertes</div>
       <div id="positionsList"><div class="empty">Aucune position</div></div>
     </div>
   </div>
 
-  <!-- Trades -->
+  <!-- ══ TRADES ════════════════════════════════════════════════ -->
   <div class="tab" id="tab-trades">
     <div class="card">
-      <div class="card-title">Derniers trades</div>
-      <div id="tradesList"><div class="empty">Aucun trade</div></div>
+      <div class="card-title">🔄 Derniers trades</div>
+      <div id="tradesList"><div class="empty">Aucun trade terminé</div></div>
     </div>
   </div>
 
-  <!-- Infos -->
-  <div class="tab" id="tab-info">
-    <div class="card">
-      <div class="card-title">Configuration</div>
-      <div id="infoContent" style="line-height:2">Chargement...</div>
+</div><!-- /container -->
+
+<!-- ══ CHAT IA ════════════════════════════════════════════════ -->
+<div class="tab" id="tab-chat">
+  <div class="chat-header">
+    <div class="chat-header-title">
+      <span class="chat-ai-dot"></span>
+      Claude — Assistant Trading
     </div>
-    <div class="card">
-      <div class="card-title">Dernière mise à jour</div>
-      <div id="lastUpdate" style="color:var(--muted);font-size:12px">—</div>
+    <button class="chat-clear-btn" onclick="clearChat()">🗑 Effacer</button>
+  </div>
+
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-welcome" id="chatWelcome">
+      <div class="chat-welcome-icon">🤖</div>
+      <h3>Bonjour ! Je suis ton IA de trading</h3>
+      <p>Je connais ton portefeuille, tes positions et les marchés en temps réel.<br>Pose-moi n'importe quelle question.</p>
+      <div class="chat-suggestions">
+        <button class="chat-suggestion" onclick="sendSuggestion('Comment se porte mon portefeuille ?')">📊 Mon portefeuille</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Analyse le marché crypto actuel')">🌍 Analyse marché</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Quels sont les risques actuels ?')">⚠️ Risques</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Explique ta dernière décision de trade')">🔍 Dernier trade</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Quand dois-je passer en mode LIVE ?')">🚀 Passer en LIVE</button>
+        <button class="chat-suggestion" onclick="sendSuggestion('Donne-moi des conseils pour améliorer la stratégie')">💡 Améliorer</button>
+      </div>
     </div>
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-input-wrap">
+    <textarea class="chat-input" id="chatInput" placeholder="Pose ta question à l'IA..." rows="1"
+      onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="chat-send-btn" id="chatSendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
   </div>
 </div>
 
-<!-- Bottom nav -->
+<!-- ══ BOTTOM NAV ════════════════════════════════════════════ -->
 <nav class="bottom-nav">
   <button class="nav-item active" onclick="switchTab('home',this)"><span class="nav-icon">📊</span>Accueil</button>
   <button class="nav-item" onclick="switchTab('positions',this)"><span class="nav-icon">📈</span>Positions</button>
   <button class="nav-item" onclick="switchTab('trades',this)"><span class="nav-icon">🔄</span>Trades</button>
-  <button class="nav-item" onclick="switchTab('info',this)"><span class="nav-icon">ℹ️</span>Infos</button>
+  <button class="nav-item" onclick="switchTab('chat',this)"><span class="nav-icon">🤖</span>Chat IA</button>
 </nav>
 
 <script>
+// ── Utilitaires ──────────────────────────────────────────────────────────────
+const SESSION_ID = 'session_' + Math.random().toString(36).slice(2);
+
 function switchTab(name, btn) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+  if (name === 'chat') {
+    document.getElementById('chatInput').focus();
+    scrollChatToBottom();
+  }
 }
 
+function fmtPnl(v) {
+  const cls = v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu';
+  return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</span>`;
+}
+
+// ── Chart ────────────────────────────────────────────────────────────────────
 let equityChart = null;
 function initChart(labels, data) {
   const ctx = document.getElementById('equityChart').getContext('2d');
   if (equityChart) equityChart.destroy();
-  const positive = data.length > 1 && data[data.length-1] >= data[0];
-  const color = positive ? '#3fb950' : '#f85149';
+  const up = data.length > 1 && data[data.length - 1] >= data[0];
+  const color = up ? '#3fb950' : '#f85149';
   equityChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[{ data, borderColor:color, borderWidth:2, fill:true,
-      backgroundColor: positive ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)',
-      pointRadius:0, tension:0.3 }]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>c.parsed.y.toFixed(2)+' USDT' }}},
-      scales:{ x:{display:false}, y:{ grid:{color:'rgba(48,54,61,.5)'}, ticks:{color:'#8b949e',font:{size:10}} }}}
+    type: 'line',
+    data: { labels, datasets: [{ data, borderColor: color, borderWidth: 2, fill: true,
+      backgroundColor: up ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)',
+      pointRadius: 0, tension: 0.3 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => c.parsed.y.toFixed(2) + ' USDT' } } },
+      scales: { x: { display: false },
+        y: { grid: { color: 'rgba(48,54,61,.5)' }, ticks: { color: '#8b949e', font: { size: 10 } } } } }
   });
 }
 
-function fmtPnl(v) {
-  const c = v>0?'pos':v<0?'neg':'neu';
-  return `<span class="${c}">${v>=0?'+':''}${v.toFixed(2)}</span>`;
-}
-
+// ── Refresh données ──────────────────────────────────────────────────────────
 async function refresh() {
   try {
-    const d = await fetch('/api/data').then(r=>r.json());
+    const d = await fetch('/api/data').then(r => r.json());
 
-    // Status
-    document.getElementById('statusDot').className = 'status-dot'+(d.paused?' paused':'');
+    document.getElementById('statusDot').className = 'status-dot' + (d.paused ? ' paused' : '');
     const badge = document.getElementById('modeBadge');
-    badge.className = 'mode-badge '+(d.paper?'mode-paper':'mode-live');
+    badge.className = 'mode-badge ' + (d.paper ? 'mode-paper' : 'mode-live');
     badge.textContent = d.paper ? '📄 PAPER' : '🔴 LIVE';
 
-    // KPIs
     const pnl = d.total_value - d.initial_capital;
-    const roi = d.initial_capital > 0 ? pnl/d.initial_capital*100 : 0;
+    const roi = d.initial_capital > 0 ? pnl / d.initial_capital * 100 : 0;
     document.getElementById('kpiCapital').textContent = d.total_value.toFixed(2);
     document.getElementById('kpiPnl').innerHTML = fmtPnl(pnl);
-    document.getElementById('kpiRoi').textContent = (roi>=0?'+':'')+roi.toFixed(2)+'%';
-    document.getElementById('kpiPositions').textContent = d.open_positions+'/'+d.max_positions;
-    document.getElementById('kpiWinrate').textContent = (d.stats.win_rate_pct||0).toFixed(1)+'%';
-    document.getElementById('kpiTrades').textContent = (d.stats.trades||0)+' trades';
+    document.getElementById('kpiRoi').textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
+    document.getElementById('kpiPositions').textContent = d.open_positions + '/' + d.max_positions;
+    document.getElementById('kpiWinrate').textContent = (d.stats.win_rate_pct || 0).toFixed(1) + '%';
+    document.getElementById('kpiWinrate').className = 'kpi-value ' + ((d.stats.win_rate_pct || 0) >= 50 ? 'pos' : 'neg');
+    document.getElementById('kpiTrades').textContent = (d.stats.trades || 0) + ' trades';
 
-    // Stats
-    document.getElementById('statPF').textContent = (d.stats.profit_factor||0).toFixed(2);
-    document.getElementById('statAvgWin').textContent = '+'+(d.stats.avg_win||0).toFixed(2);
-    document.getElementById('statAvgLoss').textContent = (d.stats.avg_loss||0).toFixed(2);
+    document.getElementById('statPF').textContent = (d.stats.profit_factor || 0).toFixed(2);
+    document.getElementById('statAvgWin').textContent = '+' + (d.stats.avg_win || 0).toFixed(2);
+    document.getElementById('statAvgLoss').textContent = (d.stats.avg_loss || 0).toFixed(2);
     const expEl = document.getElementById('statExp');
-    expEl.textContent = (d.stats.expectancy||0).toFixed(3);
-    expEl.className = 'stat-value '+((d.stats.expectancy||0)>=0?'pos':'neg');
+    expEl.textContent = (d.stats.expectancy || 0).toFixed(3);
+    expEl.className = 'stat-value ' + ((d.stats.expectancy || 0) >= 0 ? 'pos' : 'neg');
 
-    // Chart
     if (d.portfolio_history && d.portfolio_history.length > 1) {
-      initChart(d.portfolio_history.map(p=>p.time), d.portfolio_history.map(p=>p.value));
+      initChart(d.portfolio_history.map(p => p.time), d.portfolio_history.map(p => p.value));
     }
 
     // Positions
     const posDiv = document.getElementById('positionsList');
     if (!d.positions || !d.positions.length) {
-      posDiv.innerHTML = '<div class="empty">Aucune position ouverte</div>';
+      posDiv.innerHTML = '<div class="empty">📭 Aucune position ouverte</div>';
     } else {
       posDiv.innerHTML = d.positions.map(p => {
-        const cls = p.unrealized_pnl>=0?'pos':'neg';
-        const trail = p.trailing_active ? '<span class="badge badge-trail">TRAIL</span>' : '';
-        const tp1   = p.partial_done    ? '<span class="badge badge-tp1">TP1✓</span>' : '';
+        const cls   = p.unrealized_pnl >= 0 ? 'pos' : 'neg';
+        const trail = p.trailing_active ? '<span class="badge badge-trail">TRAIL 🎯</span>' : '';
+        const tp1   = p.partial_done    ? '<span class="badge badge-tp1">TP1 ✓</span>' : '';
+        const dur   = p.duration_hours  ? `${p.duration_hours.toFixed(1)}h` : '';
         return `<div class="position-item">
           <div>
             <div class="position-pair">${p.pair}${trail}${tp1}</div>
-            <div class="position-meta">${p.qty_remaining.toFixed(4)} @ ${p.entry_price.toFixed(4)} · SL:${p.stop_price.toFixed(4)}</div>
+            <div class="position-meta">${p.qty_remaining.toFixed(5)} @ ${p.entry_price.toFixed(4)}</div>
+            <div class="position-meta">SL: ${p.stop_price.toFixed(4)} · TP: ${p.tp_price.toFixed(4)}</div>
           </div>
           <div style="text-align:right">
-            <div class="pnl-value ${cls}">${p.unrealized_pnl>=0?'+':''}${p.unrealized_pnl.toFixed(2)}$</div>
-            <div style="font-size:11px;color:var(--muted)">${p.unrealized_pnl_pct>=0?'+':''}${p.unrealized_pnl_pct.toFixed(2)}%</div>
+            <div class="pnl-value ${cls}">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} $</div>
+            <div style="font-size:11px;color:var(--muted)">${p.unrealized_pnl_pct >= 0 ? '+' : ''}${p.unrealized_pnl_pct.toFixed(2)}%</div>
           </div>
         </div>`;
       }).join('');
@@ -222,35 +336,154 @@ async function refresh() {
     // Trades
     const tDiv = document.getElementById('tradesList');
     if (!d.recent_trades || !d.recent_trades.length) {
-      tDiv.innerHTML = '<div class="empty">Aucun trade terminé</div>';
+      tDiv.innerHTML = '<div class="empty">📭 Aucun trade terminé</div>';
     } else {
-      tDiv.innerHTML = d.recent_trades.slice(0,20).map(t => {
-        const cls = t.pnl_usdt>=0?'pos':'neg';
+      tDiv.innerHTML = d.recent_trades.slice(0, 25).map(t => {
+        const cls = t.pnl_usdt >= 0 ? 'pos' : 'neg';
+        const emoji = t.pnl_usdt >= 0 ? '✅' : '❌';
         return `<div class="trade-row">
-          <div><div class="trade-pair">${t.pair}</div><div class="trade-info">${t.reason} · ${t.duration_min}min</div></div>
-          <div class="trade-pnl ${cls}">${t.pnl_usdt>=0?'+':''}${t.pnl_usdt.toFixed(2)} USDT<div class="trade-info">${t.pnl_pct>=0?'+':''}${t.pnl_pct.toFixed(2)}%</div></div>
+          <div>
+            <div class="trade-pair">${emoji} ${t.pair}</div>
+            <div class="trade-info">${t.reason} · ${Math.round(t.duration_min)}min · ${new Date(t.closed_at).toLocaleDateString('fr')}</div>
+          </div>
+          <div class="trade-pnl ${cls}">
+            ${t.pnl_usdt >= 0 ? '+' : ''}${t.pnl_usdt.toFixed(2)} USDT
+            <div class="trade-info">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%</div>
+          </div>
         </div>`;
       }).join('');
     }
 
-    // Infos
+    // Infos système
     document.getElementById('infoContent').innerHTML = `
-      <div>Paires: <strong>${(d.pairs||[]).join(', ')}</strong></div>
-      <div>Risque/trade: <strong>${((d.risk_pct||0)*100).toFixed(1)}%</strong></div>
-      <div>Trailing stop: <strong>✅ actif</strong></div>
-      <div>TP partiel: <strong>✅ 50% au 1er TP</strong></div>
-      <div>ML XGBoost: <strong>${d.ml_loaded?'✅ chargé':'⚠️ non entraîné'}</strong></div>
-      <div>Claude AI: <strong>${d.claude_active?'✅ actif':'⚠️ désactivé'}</strong></div>
+      <div>🔗 Paires: <strong>${(d.pairs || []).join(', ')}</strong></div>
+      <div>⚠️ Risque/trade: <strong>${((d.risk_pct || 0) * 100).toFixed(1)}%</strong></div>
+      <div>🎯 Trailing stop: <strong class="pos">✅ actif</strong></div>
+      <div>💰 TP partiel: <strong class="pos">✅ 50% au 1er TP</strong></div>
+      <div>🧠 ML XGBoost: <strong class="${d.ml_loaded ? 'pos' : 'neg'}">${d.ml_loaded ? '✅ chargé' : '⚠️ non entraîné'}</strong></div>
+      <div>🤖 Claude AI: <strong class="${d.claude_active ? 'pos' : 'neg'}">${d.claude_active ? '✅ actif' : '⚠️ désactivé'}</strong></div>
     `;
-    document.getElementById('lastUpdate').textContent = 'Mis à jour : '+new Date().toLocaleTimeString();
+    document.getElementById('lastUpdateHeader').textContent = new Date().toLocaleTimeString('fr');
   } catch(e) { console.error('Refresh error:', e); }
 }
 
-// PWA Service Worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+// ── Chat IA ──────────────────────────────────────────────────────────────────
+let chatLoading = false;
+
+function scrollChatToBottom() {
+  const msgs = document.getElementById('chatMessages');
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function appendMessage(role, content) {
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  const typing = document.getElementById('typingIndicator');
+  const msgs   = document.getElementById('chatMessages');
+
+  const time = new Date().toLocaleTimeString('fr', { hour: '2-digit', minute: '2-digit' });
+  const div  = document.createElement('div');
+  div.className = 'msg ' + role;
+
+  if (role === 'ai') {
+    div.innerHTML = `<div class="msg-sender">🤖 Claude</div>
+      <div class="msg-bubble">${escapeHtml(content)}</div>
+      <div class="msg-time">${time}</div>`;
+  } else {
+    div.innerHTML = `<div class="msg-bubble">${escapeHtml(content)}</div>
+      <div class="msg-time">${time}</div>`;
+  }
+
+  msgs.insertBefore(div, typing);
+  scrollChatToBottom();
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\n/g,'<br>').replace(/`([^`]+)`/g,'<code style="background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px">$1</code>');
+}
+
+function setTyping(visible) {
+  document.getElementById('typingIndicator').className = 'typing-indicator' + (visible ? ' visible' : '');
+  scrollChatToBottom();
+}
+
+async function sendMessage() {
+  if (chatLoading) return;
+  const input = document.getElementById('chatInput');
+  const msg   = input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  appendMessage('user', msg);
+
+  chatLoading = true;
+  document.getElementById('chatSendBtn').disabled = true;
+  setTyping(true);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, session_id: SESSION_ID }),
+    });
+    const data = await res.json();
+    setTyping(false);
+    appendMessage('ai', data.reply || data.error || 'Erreur inconnue');
+  } catch(e) {
+    setTyping(false);
+    appendMessage('ai', '❌ Impossible de joindre le serveur.');
+  }
+
+  chatLoading = false;
+  document.getElementById('chatSendBtn').disabled = false;
+}
+
+function sendSuggestion(text) {
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+async function clearChat() {
+  await fetch('/api/chat/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: SESSION_ID }),
+  });
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML = `
+    <div class="chat-welcome" id="chatWelcome">
+      <div class="chat-welcome-icon">🤖</div>
+      <h3>Conversation effacée</h3>
+      <p>Pose-moi une nouvelle question !</p>
+    </div>
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+      </div>
+    </div>`;
+}
+
+// ── PWA Service Worker ───────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 refresh();
 setInterval(refresh, 10000);
 </script>

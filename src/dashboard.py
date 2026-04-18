@@ -13,11 +13,13 @@ injecter une référence via `set_bot_instance()`.
 import logging
 import json
 import math
+import os
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory, request
 import config
+from ai_chat import get_chat
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +234,65 @@ def index():
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(app.static_folder, filename)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chat IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    """
+    Endpoint chat IA.
+    Body JSON : { "message": "...", "session_id": "..." }
+    Réponse   : { "reply": "...", "timestamp": "..." }
+    """
+    data    = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    session = data.get("session_id") or request.remote_addr or "default"
+
+    if not message:
+        return jsonify({"error": "Message vide"}), 400
+
+    chat  = get_chat()
+
+    # Injecter le contexte portfolio si le bot tourne
+    if _bot_instance:
+        try:
+            prices = {p: _bot_instance.exchange.get_price(p) or 0
+                      for p in config.TRADE_PAIRS[:4]}  # limiter les requêtes
+            chat.set_portfolio(_bot_instance.portfolio, prices)
+        except Exception:
+            pass
+
+    reply = chat.chat(session, message)
+
+    return jsonify({
+        "reply":     reply,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@app.route("/api/chat/clear", methods=["POST"])
+def api_chat_clear():
+    """Efface l'historique de conversation."""
+    data    = request.get_json(silent=True) or {}
+    session = data.get("session_id") or request.remote_addr or "default"
+    get_chat().clear_history(session)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/chat/history", methods=["GET"])
+def api_chat_history():
+    """Retourne l'historique de conversation."""
+    session = request.args.get("session_id") or request.remote_addr or "default"
+    history = get_chat().get_history(session)
+    # Formater pour le front-end
+    formatted = [
+        {"role": msg["role"], "content": msg["content"]}
+        for msg in history
+    ]
+    return jsonify({"history": formatted})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
