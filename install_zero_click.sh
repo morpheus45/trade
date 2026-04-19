@@ -6,6 +6,8 @@
 #  USAGE (les clés sont passées en variables, jamais dans le code) :
 #
 #  export ANTHROPIC_API_KEY="sk-ant-api03-..."
+#  export BINANCE_API_KEY="QOnH..."
+#  export BINANCE_API_SECRET="NjJ7..."
 #  export TELEGRAM_BOT_TOKEN="7458912815:..."
 #  export TELEGRAM_CHAT_ID="6821928813"
 #  curl -sSL https://raw.githubusercontent.com/morpheus45/trade/main/install_zero_click.sh | sudo -E bash
@@ -44,6 +46,15 @@ CAPITAL="1000"
 ANTHR_KEY="${ANTHROPIC_API_KEY:-}"
 TG_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TG_CHAT="${TELEGRAM_CHAT_ID:-}"
+BIN_KEY="${BINANCE_API_KEY:-${BINANCE_API_KEY_1:-}}"
+BIN_SECRET="${BINANCE_API_SECRET:-${BINANCE_API_SECRET_1:-}}"
+
+# Mode live ou paper selon presence des cles Binance
+if [ -n "$BIN_KEY" ] && [ -n "$BIN_SECRET" ]; then
+    PAPER_MODE="false"
+else
+    PAPER_MODE="true"
+fi
 
 # ── Étape 1 : Système ─────────────────────────────────────────
 bar "1/10 — Mise à jour système"
@@ -99,17 +110,20 @@ python3 src/generate_icons.py -q 2>/dev/null || true
 bar "6/10 — Configuration .env"
 cat > src/.env << ENVEOF
 # === Trading Bot — Configuration ===
-API_KEY=
-API_SECRET=
+BINANCE_API_KEY=${BIN_KEY}
+BINANCE_API_SECRET=${BIN_SECRET}
+API_KEY=${BIN_KEY}
+API_SECRET=${BIN_SECRET}
 TELEGRAM_BOT_TOKEN=${TG_TOKEN}
 TELEGRAM_CHAT_ID=${TG_CHAT}
 ANTHROPIC_API_KEY=${ANTHR_KEY}
-PAPER_TRADING=true
+PAPER_TRADING=${PAPER_MODE}
 ENVEOF
 
 # Vérifier les clés
 [ -n "$ANTHR_KEY" ] && ok "ANTHROPIC_API_KEY configurée" || warn "ANTHROPIC_API_KEY manquante (fonctions IA limitées)"
 [ -n "$TG_TOKEN"  ] && ok "TELEGRAM configuré"           || warn "Telegram non configuré (alertes désactivées)"
+[ -n "$BIN_KEY"    ] && ok "BINANCE API — LIVE TRADING"   || warn "BINANCE absent → Paper Trading actif"
 ok ".env créé"
 
 # ── Étape 8 : Git config pour reporting ───────────────────────

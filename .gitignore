@@ -12,6 +12,7 @@ logiciels/
 # Logs et données
 logs/
 data/
+!docs/data/
 
 # Python
 __pycache__/

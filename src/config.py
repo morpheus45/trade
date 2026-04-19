@@ -9,8 +9,13 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 # ─── Credentials Exchange ────────────────────────────────────────────────────
-BINANCE_API_KEY    = os.getenv("API_KEY", "")
-BINANCE_API_SECRET = os.getenv("API_SECRET", "")
+# Accepte BINANCE_API_KEY ou API_KEY (compatibilité avec les deux nommages)
+BINANCE_API_KEY    = (os.getenv("BINANCE_API_KEY") or
+                      os.getenv("BINANCE_API_KEY_1") or
+                      os.getenv("API_KEY", ""))
+BINANCE_API_SECRET = (os.getenv("BINANCE_API_SECRET") or
+                      os.getenv("BINANCE_API_SECRET_1") or
+                      os.getenv("API_SECRET", ""))
 
 # ─── Telegram ────────────────────────────────────────────────────────────────
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
