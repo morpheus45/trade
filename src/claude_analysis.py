@@ -563,7 +563,7 @@ Réponds UNIQUEMENT en JSON :
             text = self._call(prompt, model=MODEL_FAST)
             data = self._parse_json(text)
 
-            should_trade = bool(data.get("trade", True))
+            should_trade = bool(data.get("trade", False))
             confidence   = float(data.get("confidence", 0.5))
             reason       = data.get("reason", "")
 

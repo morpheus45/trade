@@ -42,10 +42,13 @@ TIMEFRAME_PRIMARY = "1h"    # Signal d'entrée — indicateurs techniques
 TIMEFRAME_TREND   = "4h"    # Confirmation tendance macro (filtre supérieur)
 
 # ─── Gestion du risque ───────────────────────────────────────────────────────
-RISK_PER_TRADE_PCT    = 0.015  # 1.5% du capital par trade (réduit car 8 paires)
+RISK_PER_TRADE_PCT    = 0.05   # 5% du capital par trade (petit capital — atteint le minimum Binance)
 STOP_LOSS_ATR_MULT    = 1.5    # Stop = 1.5 × ATR
 TAKE_PROFIT_ATR_MULT  = 3.0    # TP = 3.0 × ATR (R:R = 1:2)
-MAX_OPEN_POSITIONS    = 5      # Max simultané (3 → 5)
+MAX_OPEN_POSITIONS    = 1      # Petit capital : 1 position à la fois
+# Binance minimum order value (USDT)
+MIN_ORDER_USDT        = 5.0   # Refuser les ordres < 5 USDT notional
+MAX_POSITION_PCT      = 0.90  # Max 90% du capital par trade (petit compte)
 
 # ─── Trailing stop ───────────────────────────────────────────────────────────
 # Active le trailing stop dès que la position est profitable à x%
@@ -62,7 +65,7 @@ PARTIAL_TP_ATR_MULT    = 1.5    # Premier TP à 1.5 × ATR (= 50% de TAKE_PROFIT
 # Quand ML + Claude sont en accord fort → augmenter la mise
 ADAPTIVE_SIZE_FACTOR        = 1.5   # ×1.5 sur signaux de haute qualité
 ADAPTIVE_SIZE_ML_THRESHOLD  = 0.75  # ML confidence requise
-ADAPTIVE_SIZE_MAX_PCT       = 0.025 # Plafond absolu : 2.5% du capital
+ADAPTIVE_SIZE_MAX_PCT       = 0.07  # Plafond : 7% du capital (petit capital)
 
 # ─── Circuit breaker ─────────────────────────────────────────────────────────
 DAILY_LOSS_LIMIT_PCT  = 0.05   # -5% en 1 jour → pause trading

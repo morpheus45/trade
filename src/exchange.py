@@ -23,6 +23,8 @@ class Exchange:
             "enableRateLimit": True,
         })
 
+        self._markets_cache: dict = {}
+
         if self.paper_trading:
             logger.info("⚠️  MODE PAPER TRADING activé — aucun ordre réel ne sera passé")
         else:
@@ -103,7 +105,9 @@ class Exchange:
 
         # ─── Ordre réel ───────────────────────────────────────────────────
         try:
-            markets = self._exchange.load_markets()
+            if not self._markets_cache:
+                self._markets_cache = self._exchange.load_markets()
+            markets = self._markets_cache
             market = markets.get(pair, {})
             limits = market.get("limits", {})
 

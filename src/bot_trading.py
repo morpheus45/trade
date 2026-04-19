@@ -22,6 +22,7 @@ import time
 import threading
 from datetime import datetime, timezone
 
+import pandas as pd
 import config
 from logger import setup_logging, log_trade, log_portfolio_snapshot
 from exchange import Exchange
@@ -83,6 +84,7 @@ class TradingBot:
 
         self._last_day          = datetime.now(timezone.utc).day
         self._last_stats_hour   = -1
+        self._last_scan: dict = {}
 
         claude_status = "actif" if self.claude.enabled else "désactivé"
         logger.info(f"Claude: {claude_status}")
@@ -130,7 +132,7 @@ class TradingBot:
                     and should_take_profit(price, pos.partial_tp, pos.side)):
                 qty_to_sell = pos.quantity * config.PARTIAL_TP_RATIO
                 order       = self.exchange.place_market_order(pair, "sell", qty_to_sell)
-                exit_price  = order["price"] if order else price
+                exit_price  = (order.get("average") or order.get("price") or price) if order else price
                 trade       = self.portfolio.execute_partial_tp(
                     pair, exit_price, order_id=order["id"] if order else ""
                 )
@@ -152,7 +154,7 @@ class TradingBot:
 
             if reason:
                 order      = self.exchange.place_market_order(pair, "sell", pos.qty_remaining)
-                exit_price = order["price"] if order else price
+                exit_price = (order.get("average") or order.get("price") or price) if order else price
                 trade      = self.portfolio.close_position(
                     pair, exit_price, reason=reason,
                     order_id=order["id"] if order else ""
@@ -173,6 +175,10 @@ class TradingBot:
             return
 
         for pair in config.TRADE_PAIRS:
+            # Throttle: scan each pair at most once every 5 minutes
+            if time.time() - self._last_scan.get(pair, 0) < 300:
+                continue
+            self._last_scan[pair] = time.time()
             if not self.portfolio.can_open_position():
                 break
             if self.portfolio.has_position(pair):
@@ -213,7 +219,8 @@ class TradingBot:
             df_ind = add_all_indicators(df_1h)
             last   = df_ind.iloc[-1]
             price  = prices.get(pair) or float(last["close"])
-            atr    = float(last["atr"]) if not df_ind.empty else price * 0.01
+            atr_raw = last.get("atr")
+            atr = float(atr_raw) if (atr_raw is not None and pd.notna(atr_raw)) else price * 0.01
 
             indicators_snapshot = {
                 "rsi":            float(last.get("rsi", 50)),

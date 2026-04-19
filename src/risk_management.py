@@ -32,19 +32,27 @@ def calculate_position_size(
     """
     risk_pct = risk_pct or config.RISK_PER_TRADE_PCT
     risk_amount = capital * risk_pct
-    price_risk = entry_price - stop_price
+    price_risk = abs(entry_price - stop_price)
 
     if price_risk <= 0:
-        logger.error("Stop-loss doit être sous le prix d'entrée")
+        logger.error("Stop-loss identique au prix d'entrée — position ignorée")
         return 0.0
 
     qty = risk_amount / price_risk
 
-    max_qty = (capital * 0.10) / entry_price
-    if qty > max_qty:
-        logger.warning(f"Position réduite de {qty:.6f} à {max_qty:.6f} (plafond 10%)")
+    max_pct = getattr(config, "MAX_POSITION_PCT", 0.90)
+    max_qty = (capital * max_pct) / entry_price
+    if qty > max_qty:  # plafond MAX_POSITION_PCT
+        logger.warning(f"Position reduite (plafond {max_pct*100:.0f}%)")
         qty = max_qty
 
+
+    # Verification valeur minimale ordre Binance (refuse < MIN_ORDER_USDT)
+    min_order = getattr(config, "MIN_ORDER_USDT", 5.0)
+    notional   = qty * entry_price
+    if notional < min_order:
+        logger.warning(f"Ordre trop petit ({notional:.2f} USDT < {min_order} USDT) — ignore")
+        return 0.0
     return qty
 
 
