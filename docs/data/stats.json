@@ -1,31 +1,31 @@
 {
-  "timestamp": "2026-04-19T00:00:00Z",
-  "mode": "PAPER",
-  "capital": 1000.0,
-  "initial_capital": 1000.0,
-  "roi_pct": 0.0,
-  "total_trades": 0,
-  "winning_trades": 0,
+  "updated_at": "2026-04-19T13:32:45.497358+00:00",
+  "mode": "LIVE",
+  "bot_version": "2.0",
+  "initial_capital": 6.98579857,
+  "current_capital": 6.99,
+  "roi_pct": 0.06,
   "win_rate": 0.0,
   "profit_factor": 0.0,
-  "max_drawdown_pct": 0.0,
-  "open_positions": 0,
-  "daily_pnl": 0.0,
-  "weekly_pnl": 0.0,
-  "monthly_pnl": 0.0,
-  "sharpe_ratio": 0.0,
+  "total_trades": 0,
+  "winning_trades": 0,
+  "losing_trades": 0,
+  "avg_win_usdt": 0.0,
+  "avg_loss_usdt": 0.0,
   "expectancy": 0.0,
-  "circuit_breaker": false,
-  "equity_curve": [
-    {"time": "2026-04-19T00:00:00Z", "value": 1000.0}
-  ],
-  "positions": [],
+  "best_trade_pct": 0.0,
+  "worst_trade_pct": 0.0,
+  "open_positions": [],
   "recent_trades": [],
-  "pairs_performance": {},
-  "activity_log": [
-    {"time": "2026-04-19T00:00:00Z", "msg": "Bot initialise — en attente de signaux"}
+  "equity_curve": [
+    {
+      "t": "2026-04-19T13:32:45.497358+00:00",
+      "v": 6.99
+    }
   ],
-  "fear_greed": {"value": 50, "label": "Neutral"},
-  "market_regime": "initialisation",
-  "claude_analysis": "Bot demarre. En cours d'analyse des marches..."
+  "pairs_performance": {},
+  "last_claude_analysis": "",
+  "market_sentiment": "neutral",
+  "fng_value": 50,
+  "activity_log": []
 }
