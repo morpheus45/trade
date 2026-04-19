@@ -101,12 +101,20 @@ class TradingBot:
             logger.info(f"Capital initial (paper): {cap:.2f} USDT")
             return cap
         else:
-            bal = self.exchange.get_balance("USDT")
-            if bal <= 0:
-                logger.error("Solde USDT nul — vérifier les clés API")
-                sys.exit(1)
-            logger.info(f"Capital initial (live): {bal:.2f} USDT")
-            return bal
+            for attempt in range(6):
+                bal = self.exchange.get_balance("USDT")
+                if bal > 0:
+                    logger.info(f"Capital initial (live): {bal:.2f} USDT")
+                    return bal
+                eur = self.exchange.get_balance("EUR")
+                if eur > 0:
+                    logger.warning(f"Solde EUR: {eur:.2f} EUR. Convertis en USDT sur Binance -> tentative {attempt+1}/6 dans 30s...")
+                    tg._send(f"Solde en EUR ({eur:.2f} EUR). Va sur Binance -> Actifs -> Convertir -> EUR vers USDT puis reviens.")
+                else:
+                    logger.warning(f"Solde USDT nul (tentative {attempt+1}/6). Verifier cles API. Attente 30s...")
+                time.sleep(30)
+            logger.error("Impossible de recuperer le solde USDT. Arret.")
+            sys.exit(1)
 
     # ─── Gestion des positions ouvertes ──────────────────────────────────────
 
