@@ -98,14 +98,20 @@ class PortfolioManager:
             logger.warning(f"Position déjà ouverte sur {pair}, ignoré")
             return False
 
-        cost = quantity * entry_price
-        if cost > self.quote_balance * 1.01:  # 1% de tolérance pour flottant
+        fee_pct = getattr(config, "BINANCE_FEE_PCT", 0.001)
+        cost    = quantity * entry_price
+        fee_in  = cost * fee_pct           # Frais d'entrée
+        total_cost = cost + fee_in
+
+        if total_cost > self.quote_balance * 1.01:
             logger.warning(
-                f"Capital insuffisant pour {pair}: besoin {cost:.2f}, dispo {self.quote_balance:.2f}"
+                f"Capital insuffisant pour {pair}: besoin {total_cost:.4f} (dont {fee_in:.4f} fees), "
+                f"dispo {self.quote_balance:.4f}"
             )
             return False
 
-        self.quote_balance -= cost
+        self.quote_balance -= total_cost
+        logger.info(f"Frais entree {pair}: {fee_in:.4f} EUR")
         self.positions[pair] = Position(
             pair=pair,
             side=side,
@@ -135,15 +141,20 @@ class PortfolioManager:
         if pos is None or pos.partial_done:
             return None
 
+        fee_pct     = getattr(config, "BINANCE_FEE_PCT", 0.001)
         qty_to_sell = pos.quantity * config.PARTIAL_TP_RATIO
-        proceeds    = qty_to_sell * exit_price
+        gross       = qty_to_sell * exit_price
+        fee_out     = gross * fee_pct
+        proceeds    = gross - fee_out
         self.quote_balance += proceeds
 
-        pos.partial_done   = True
-        pos.qty_remaining  = pos.quantity - qty_to_sell
+        pos.partial_done  = True
+        pos.qty_remaining = pos.quantity - qty_to_sell
 
-        pnl = (exit_price - pos.entry_price) * qty_to_sell
-        pnl_pct = (exit_price - pos.entry_price) / pos.entry_price * 100
+        # PnL net de frais (frais entree proportionnels + frais sortie)
+        fee_in_partial = (qty_to_sell * pos.entry_price) * fee_pct
+        pnl     = (exit_price - pos.entry_price) * qty_to_sell - fee_in_partial - fee_out
+        pnl_pct = pnl / (pos.entry_price * qty_to_sell) * 100
 
         trade = {
             "pair":        pair,
@@ -182,11 +193,16 @@ class PortfolioManager:
             logger.warning(f"Aucune position ouverte sur {pair}")
             return None
 
-        proceeds = pos.qty_remaining * exit_price
+        fee_pct  = getattr(config, "BINANCE_FEE_PCT", 0.001)
+        gross    = pos.qty_remaining * exit_price
+        fee_out  = gross * fee_pct
+        proceeds = gross - fee_out
         self.quote_balance += proceeds
 
-        pnl     = (exit_price - pos.entry_price) * pos.qty_remaining
-        pnl_pct = (exit_price - pos.entry_price) / pos.entry_price * 100
+        # PnL net : frais entree (qty_remaining) + frais sortie
+        fee_in_remaining = (pos.qty_remaining * pos.entry_price) * fee_pct
+        pnl     = (exit_price - pos.entry_price) * pos.qty_remaining - fee_in_remaining - fee_out
+        pnl_pct = pnl / (pos.entry_price * pos.qty_remaining) * 100
 
         # Si TP partiel déjà exécuté, ajouter le P&L de la première tranche
         total_pnl = pnl

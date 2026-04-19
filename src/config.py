@@ -49,15 +49,21 @@ TRADE_PAIRS = [
 TIMEFRAME_PRIMARY = "1h"    # Signal d'entrée — indicateurs techniques
 TIMEFRAME_TREND   = "4h"    # Confirmation tendance macro (filtre supérieur)
 
+# ─── Frais Binance ───────────────────────────────────────────────────────────
+BINANCE_FEE_PCT       = 0.001  # 0.1% par ordre (entrée + sortie = 0.2% aller-retour)
+# Un trade doit gagner > 2 × FEE_PCT pour être rentable après frais
+
 # ─── Gestion du risque ───────────────────────────────────────────────────────
-RISK_PER_TRADE_PCT    = 0.05   # 5% du capital par trade (petit capital — atteint le minimum Binance)
+RISK_PER_TRADE_PCT    = 0.05   # 5% du capital par trade
 STOP_LOSS_ATR_MULT    = 1.5    # Stop = 1.5 × ATR
-TAKE_PROFIT_ATR_MULT  = 3.0    # TP = 3.0 × ATR (R:R = 1:2)
+TAKE_PROFIT_ATR_MULT  = 3.0    # TP = 3.0 × ATR → ~2-3% gain typique >> 0.2% fees
 MAX_OPEN_POSITIONS    = 1      # Petit capital : 1 position à la fois
 # Binance minimum order value (EUR)
-MIN_ORDER_EUR         = 5.0   # Refuser les ordres < 5 EUR notional
-MIN_ORDER_USDT        = 5.0   # Alias compat (ne pas supprimer)
-MAX_POSITION_PCT      = 0.90  # Max 90% du capital par trade (petit compte)
+MIN_ORDER_EUR         = 5.0    # Refuser les ordres < 5 EUR notional
+MIN_ORDER_USDT        = 5.0    # Alias compat (ne pas supprimer)
+MAX_POSITION_PCT      = 0.90   # Max 90% du capital par trade (petit compte)
+# Profit minimum net de frais pour valider un trade
+MIN_PROFIT_AFTER_FEES = 2 * BINANCE_FEE_PCT  # 0.2% minimum absolu
 
 # ─── Trailing stop ───────────────────────────────────────────────────────────
 # Active le trailing stop dès que la position est profitable à x%

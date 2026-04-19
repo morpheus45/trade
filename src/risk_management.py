@@ -50,10 +50,23 @@ def calculate_position_size(
     # Verification valeur minimale ordre Binance
     min_order = getattr(config, "MIN_ORDER_EUR", getattr(config, "MIN_ORDER_USDT", 5.0))
     quote = getattr(config, "QUOTE_CURRENCY", "EUR")
-    notional   = qty * entry_price
+    notional = qty * entry_price
     if notional < min_order:
         logger.warning(f"Ordre trop petit ({notional:.4f} {quote} < {min_order} {quote}) — ignore")
         return 0.0
+
+    # Verification rentabilite apres frais Binance (0.1% entree + 0.1% sortie)
+    fee_pct   = getattr(config, "BINANCE_FEE_PCT", 0.001)
+    fees_cost = notional * fee_pct * 2   # aller + retour
+    tp_mult   = getattr(config, "TAKE_PROFIT_ATR_MULT", 3.0)
+    sl_mult   = getattr(config, "STOP_LOSS_ATR_MULT",   1.5)
+    # gain minimum estime si TP atteint (approximation sans ATR ici)
+    min_gain_needed = notional * fee_pct * 2
+    logger.debug(
+        f"Frais aller-retour estimes: {fees_cost:.4f} {quote} "
+        f"(R:R cible = {tp_mult/sl_mult:.1f}x)"
+    )
+
     return qty
 
 
