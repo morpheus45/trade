@@ -42,6 +42,7 @@ from claude_analysis import ClaudeAnalyst
 from indicators import add_all_indicators
 import telegram_alerts as tg
 import telegram_controller as tg_ctrl
+from github_reporter import GitHubReporter
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -77,6 +78,8 @@ class TradingBot:
         self.claude     = ClaudeAnalyst()
         self.cb         = CircuitBreaker(self.portfolio.initial_capital)
         self.trailing   = TrailingStopManager()
+        self.reporter = GitHubReporter(config.BASE_DIR, self.portfolio)
+        self.reporter.start()
 
         self._last_day          = datetime.now(timezone.utc).day
         self._last_stats_hour   = -1
@@ -307,6 +310,10 @@ class TradingBot:
             if self.claude.enabled:
                 briefing = self.claude.daily_market_briefing(config.TRADE_PAIRS, stats)
                 tg._send(f"📰 *Briefing du jour*\n{briefing}")
+                self.reporter.update_context(
+                    {},
+                    claude_analysis=briefing if briefing else "",
+                )
 
             logger.info(f"[DAILY RESET] Stats: {stats}")
 
@@ -318,6 +325,7 @@ class TradingBot:
             log_portfolio_snapshot(self.portfolio.quote_balance, total,
                                    len(self.portfolio.positions))
             self.cb.update(total)
+            self.reporter.update_context(prices)
 
     # ─── Boucle principale ────────────────────────────────────────────────────
 

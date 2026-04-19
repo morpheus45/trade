@@ -95,6 +95,9 @@ if exist "%INSTALL_DIR%\.git" (
     )
     echo [OK] Code telecharge
 )
+git config -C "%INSTALL_DIR%" user.email "tradingbot@auto.local" >nul 2>&1
+git config -C "%INSTALL_DIR%" user.name "TradingBot" >nul 2>&1
+echo [OK] Git config utilisateur configure
 
 REM -- 4/8 : Environnement virtuel Python --
 echo [4/8] Environnement Python...

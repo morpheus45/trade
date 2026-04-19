@@ -253,8 +253,7 @@ class GitHubReporter:
             # git add
             subprocess.run(
                 ["git", "add",
-                 str(self.stats_path.relative_to(self.repo_dir)),
-                 str(self.equity_path.relative_to(self.repo_dir))],
+                 str(self.stats_path.relative_to(self.repo_dir))],
                 cwd=str(self.repo_dir),
                 check=True,
                 capture_output=True,
