@@ -2,13 +2,10 @@
 Watchdog — garde le bot vivant 24/7.
 
 Ce script lance bot_trading.py et dashboard.py en sous-processus.
-Si l'un d'eux crashe, il le redémarre automatiquement après un délai.
+Si l'un d'eux crashe, il le redémarre automatiquement apres un delai.
 
 Usage :
     python run_forever.py
-
-C'est CE script qu'on configure en démarrage automatique Windows,
-pas bot_trading.py directement.
 """
 import subprocess
 import sys
@@ -19,9 +16,14 @@ import signal
 import threading
 import requests
 from pathlib import Path
-from datetime import datetime
 
-# ─── Config ──────────────────────────────────────────────────────────────────
+# ── Fix encodage Windows (cp1252 ne supporte pas les caracteres Unicode) ──────
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+# ─── Config ───────────────────────────────────────────────────────────────────
 SRC_DIR       = Path(__file__).parent
 PYTHON        = sys.executable
 BOT_SCRIPT    = SRC_DIR / "bot_trading.py"
@@ -29,13 +31,11 @@ DASH_SCRIPT   = SRC_DIR / "dashboard.py"
 LOG_DIR       = SRC_DIR.parent / "logs"
 WATCHDOG_LOG  = LOG_DIR / "watchdog.log"
 
-RESTART_DELAY      = 10    # Secondes avant redémarrage après crash
-MAX_RESTARTS       = 20    # Nombre max de redémarrages (évite boucle infinie)
-RESTART_WINDOW     = 300   # Si MAX_RESTARTS en moins de 5 min → abandon
-HEALTH_CHECK_EVERY = 60    # Vérification santé toutes les 60s
+RESTART_DELAY      = 15    # Secondes avant redemerrage apres crash
+MAX_RESTARTS       = 20    # Nombre max de redemarrages
+RESTART_WINDOW     = 300   # Fenetre en secondes
+HEALTH_CHECK_EVERY = 60
 DASHBOARD_PORT     = 5000
-
-# ─────────────────────────────────────────────────────────────────────────────
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -50,16 +50,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _running    = True
-_processes  = {}   # name → subprocess.Popen
+_processes  = {}
 
 
 def _signal_handler(sig, frame):
     global _running
-    logger.info("Signal reçu — arrêt propre de tous les processus...")
+    logger.info("Signal recu -- arret propre de tous les processus...")
     _running = False
     for name, proc in _processes.items():
         if proc and proc.poll() is None:
-            logger.info(f"Arrêt de {name} (PID {proc.pid})")
+            logger.info(f"Arret de {name} (PID {proc.pid})")
             proc.terminate()
     sys.exit(0)
 
@@ -68,21 +68,45 @@ signal.signal(signal.SIGINT,  _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 
 
+def _open_log(log_file: Path):
+    """Ouvre le fichier log en ecriture, avec retry si verrou Windows."""
+    for attempt in range(5):
+        try:
+            return open(log_file, "a", encoding="utf-8", errors="replace", buffering=1)
+        except PermissionError:
+            logger.warning(f"Log {log_file.name} verrouille, attente {attempt+1}s...")
+            time.sleep(attempt + 1)
+    # Dernier recours : nouveau fichier horodate
+    ts = time.strftime("%H%M%S")
+    alt = log_file.parent / f"{log_file.stem}_{ts}.log"
+    logger.warning(f"Utilisation fichier alternatif: {alt.name}")
+    return open(alt, "a", encoding="utf-8", errors="replace", buffering=1)
+
+
 def _start_process(name: str, script: Path) -> subprocess.Popen:
     """Lance un processus Python et retourne le handle."""
     log_file = LOG_DIR / f"{name}.log"
-    log_fh   = open(log_file, "a", encoding="utf-8", buffering=1)
+    log_fh   = _open_log(log_file)
 
-    kwargs = dict(cwd=str(SRC_DIR), stdout=log_fh, stderr=log_fh)
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"   # force utf-8 dans les sous-processus
+
+    kwargs = dict(
+        cwd=str(SRC_DIR),
+        stdout=log_fh,
+        stderr=log_fh,
+        env=env,
+    )
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
     proc = subprocess.Popen([PYTHON, str(script)], **kwargs)
-    logger.info(f"[{name}] Démarré (PID {proc.pid}) → log: {log_file}")
+    proc._log_fh = log_fh   # garde la reference pour fermeture propre
+    logger.info(f"[{name}] Demarre (PID {proc.pid}) -> log: {log_file.name}")
     return proc
 
 
 def _dashboard_healthy() -> bool:
-    """Vérifie que le dashboard répond sur /api/data."""
     try:
         r = requests.get(f"http://127.0.0.1:{DASHBOARD_PORT}/api/data", timeout=3)
         return r.status_code == 200
@@ -91,14 +115,10 @@ def _dashboard_healthy() -> bool:
 
 
 def _watch(name: str, script: Path) -> None:
-    """
-    Boucle de surveillance pour un processus.
-    Tourne dans son propre thread.
-    """
     restart_times = []
     restarts      = 0
 
-    logger.info(f"[{name}] Surveillance démarrée.")
+    logger.info(f"[{name}] Surveillance demarree.")
     proc = _start_process(name, script)
     _processes[name] = proc
 
@@ -106,20 +126,28 @@ def _watch(name: str, script: Path) -> None:
         ret = proc.poll()
 
         if ret is not None:
-            # Processus terminé
+            # Fermer proprement le fichier log avant de rouvrir
+            lh = getattr(proc, "_log_fh", None)
+            if lh:
+                try:
+                    lh.flush()
+                    lh.close()
+                except Exception:
+                    pass
+
             now = time.time()
             restart_times = [t for t in restart_times if now - t < RESTART_WINDOW]
 
             if len(restart_times) >= MAX_RESTARTS:
                 logger.error(
                     f"[{name}] {MAX_RESTARTS} crashs en {RESTART_WINDOW}s. "
-                    "Abandon pour éviter une boucle infinie. Vérifie les logs."
+                    "Abandon. Verifier les logs."
                 )
                 break
 
             restarts += 1
             logger.warning(
-                f"[{name}] Crashé (code={ret}) — redémarrage #{restarts} "
+                f"[{name}] Crash (code={ret}) -- redemerrage #{restarts} "
                 f"dans {RESTART_DELAY}s..."
             )
             time.sleep(RESTART_DELAY)
@@ -133,52 +161,41 @@ def _watch(name: str, script: Path) -> None:
 
         time.sleep(5)
 
-    logger.info(f"[{name}] Surveillance terminée.")
+    logger.info(f"[{name}] Surveillance terminee.")
 
 
 def _health_monitor() -> None:
-    """
-    Moniteur de santé global — vérifie le dashboard et log l'état.
-    """
     while _running:
         time.sleep(HEALTH_CHECK_EVERY)
-        status_parts = []
-
+        parts = []
         for name, proc in _processes.items():
             if proc:
-                alive = proc.poll() is None
-                status_parts.append(f"{name}={'UP' if alive else 'DOWN'}")
-
-        dash_ok = _dashboard_healthy()
-        status_parts.append(f"dashboard_api={'OK' if dash_ok else 'KO'}")
-
-        logger.info("Health: " + " | ".join(status_parts))
+                parts.append(f"{name}={'UP' if proc.poll() is None else 'DOWN'}")
+        parts.append(f"dashboard_api={'OK' if _dashboard_healthy() else 'KO'}")
+        logger.info("Health: " + " | ".join(parts))
 
 
 def main():
     logger.info("=" * 50)
-    logger.info("  WATCHDOG démarré")
-    logger.info(f"  Bot: {BOT_SCRIPT}")
-    logger.info(f"  Dashboard: {DASH_SCRIPT}")
-    logger.info(f"  Redémarrage auto: oui (max {MAX_RESTARTS} en {RESTART_WINDOW}s)")
+    logger.info("  WATCHDOG demarre")
+    logger.info(f"  Bot:       {BOT_SCRIPT.name}")
+    logger.info(f"  Dashboard: {DASH_SCRIPT.name}")
+    logger.info(f"  Restart auto: max {MAX_RESTARTS} en {RESTART_WINDOW}s")
     logger.info("=" * 50)
 
-    # Lancer les threads de surveillance
     threads = [
         threading.Thread(target=_watch, args=("bot",       BOT_SCRIPT),  daemon=True, name="watch-bot"),
         threading.Thread(target=_watch, args=("dashboard", DASH_SCRIPT), daemon=True, name="watch-dash"),
         threading.Thread(target=_health_monitor, daemon=True, name="health"),
     ]
 
-    # Lancer le dashboard 3 secondes après le bot (attendre l'init)
     threads[0].start()
     time.sleep(3)
     threads[1].start()
     threads[2].start()
 
-    logger.info("Tous les processus démarrés. Ctrl+C pour arrêter.")
+    logger.info("Tous les processus demarres. Ctrl+C pour arreter.")
 
-    # Garder le processus principal vivant
     try:
         while _running:
             time.sleep(1)

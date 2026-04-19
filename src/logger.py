@@ -22,7 +22,9 @@ def setup_logging() -> logging.Logger:
     fh.setLevel(logging.DEBUG)
 
     # Handler console
-    ch = logging.StreamHandler()
+    import sys, io
+    _stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, "buffer") else sys.stdout
+    ch = logging.StreamHandler(_stream)
     ch.setFormatter(formatter)
     ch.setLevel(logging.INFO)
 

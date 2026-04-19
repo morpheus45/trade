@@ -46,7 +46,7 @@ REM -- Redemarrer le bot --
 echo.
 echo [->] Arret du bot actuel...
 taskkill /F /IM python.exe /T >nul 2>&1
-timeout /t 2 /nobreak >nul
+timeout /t 6 /nobreak >nul
 
 echo [->] Redemarrage en mode LIVE...
 start "Trading Bot LIVE" /MIN cmd /c "cd /d "%INSTALL_DIR%" && "%PYTHON%" src\run_forever.py >> logs\bot.log 2>&1"
