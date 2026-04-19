@@ -28,7 +28,7 @@ from indicators import add_all_indicators, ML_FEATURES
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-PAIRS         = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "AVAX/USDT"]
+PAIRS         = ["BTC/EUR", "ETH/EUR", "BNB/EUR", "SOL/EUR", "XRP/EUR"]
 TIMEFRAME     = "1h"
 LOOKAHEAD     = 4       # Bougies en avant pour le label
 TARGET_GAIN   = 0.01    # Gain minimum : +1%

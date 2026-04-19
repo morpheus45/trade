@@ -24,17 +24,21 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─── Mode de fonctionnement ──────────────────────────────────────────────────
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
+# ─── Devise de cotation ──────────────────────────────────────────────────────
+# EUR obligatoire pour Binance France (MiCA — USDT restreint)
+QUOTE_CURRENCY = "EUR"
+
 # ─── Paires tradées ──────────────────────────────────────────────────────────
-# Top 8 crypto par liquidité — diversification = plus d'opportunités
+# Paires EUR disponibles sur Binance France
 TRADE_PAIRS = [
-    "BTC/USDT",   # Roi du marché — signal de tendance macro
-    "ETH/USDT",   # DeFi / altseason leader
-    "BNB/USDT",   # BNB Chain ecosystem
-    "SOL/USDT",   # Layer 1 haute performance
-    "AVAX/USDT",  # Layer 1 compétiteur
-    "MATIC/USDT", # Layer 2 Ethereum
-    "XRP/USDT",   # Haute liquidité, corrélation modérée BTC
-    "DOGE/USDT",  # Momentum / sentiment driven
+    "BTC/EUR",    # Roi du marché — signal de tendance macro
+    "ETH/EUR",    # DeFi / altseason leader
+    "BNB/EUR",    # BNB Chain ecosystem
+    "SOL/EUR",    # Layer 1 haute performance
+    "XRP/EUR",    # Haute liquidité, corrélation modérée BTC
+    "DOGE/EUR",   # Momentum / sentiment driven
+    "ADA/EUR",    # Cardano
+    "LTC/EUR",    # Litecoin
 ]
 
 # ─── Timeframes ───────────────────────────────────────────────────────────────
@@ -46,8 +50,9 @@ RISK_PER_TRADE_PCT    = 0.05   # 5% du capital par trade (petit capital — atte
 STOP_LOSS_ATR_MULT    = 1.5    # Stop = 1.5 × ATR
 TAKE_PROFIT_ATR_MULT  = 3.0    # TP = 3.0 × ATR (R:R = 1:2)
 MAX_OPEN_POSITIONS    = 1      # Petit capital : 1 position à la fois
-# Binance minimum order value (USDT)
-MIN_ORDER_USDT        = 5.0   # Refuser les ordres < 5 USDT notional
+# Binance minimum order value (EUR)
+MIN_ORDER_EUR         = 5.0   # Refuser les ordres < 5 EUR notional
+MIN_ORDER_USDT        = 5.0   # Alias compat (ne pas supprimer)
 MAX_POSITION_PCT      = 0.90  # Max 90% du capital par trade (petit compte)
 
 # ─── Trailing stop ───────────────────────────────────────────────────────────

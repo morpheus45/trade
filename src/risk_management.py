@@ -47,11 +47,12 @@ def calculate_position_size(
         qty = max_qty
 
 
-    # Verification valeur minimale ordre Binance (refuse < MIN_ORDER_USDT)
-    min_order = getattr(config, "MIN_ORDER_USDT", 5.0)
+    # Verification valeur minimale ordre Binance
+    min_order = getattr(config, "MIN_ORDER_EUR", getattr(config, "MIN_ORDER_USDT", 5.0))
+    quote = getattr(config, "QUOTE_CURRENCY", "EUR")
     notional   = qty * entry_price
     if notional < min_order:
-        logger.warning(f"Ordre trop petit ({notional:.2f} USDT < {min_order} USDT) — ignore")
+        logger.warning(f"Ordre trop petit ({notional:.4f} {quote} < {min_order} {quote}) — ignore")
         return 0.0
     return qty
 

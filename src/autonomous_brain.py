@@ -433,7 +433,7 @@ Sois concis, factuel et actionnable. Maximum 15 lignes. Format Telegram (pas de 
         if self.researcher:
             try:
                 global_market = self.researcher.get_global_market()
-                btc_data      = self.researcher.research_pair("BTC/USDT")
+                btc_data      = self.researcher.research_pair("BTC/EUR")
             except Exception as e:
                 logger.warning("get_market_regime : erreur researcher (%s)", e)
 
@@ -449,9 +449,10 @@ Sois concis, factuel et actionnable. Maximum 15 lignes. Format Telegram (pas de 
 
         # Indicateurs BTC depuis df_dict
         btc_indicators = ""
-        if df_dict and "BTC/USDT" in df_dict:
+        btc_pair = next((p for p in (df_dict or {}) if p.startswith("BTC/")), None)
+        if df_dict and btc_pair:
             try:
-                df = df_dict["BTC/USDT"]
+                df = df_dict[btc_pair]
                 if not df.empty:
                     last = df.iloc[-1]
                     rsi  = last.get("rsi", "N/A")

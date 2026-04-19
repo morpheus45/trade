@@ -63,7 +63,7 @@ class Exchange:
         ticker = self.fetch_ticker(pair)
         return ticker.get("last") if ticker else None
 
-    def get_balance(self, asset: str = "USDT") -> float:
+    def get_balance(self, asset: str = "EUR") -> float:
         """Solde disponible pour un actif."""
         if self.paper_trading:
             return 0.0  # Géré par PortfolioManager en paper mode

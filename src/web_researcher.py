@@ -52,28 +52,27 @@ _RSS_FEEDS = {
     "Decrypt":       "https://decrypt.co/feed",
 }
 
-# Mapping paire Binance → id CoinGecko
+# Mapping paire Binance → id CoinGecko (EUR + USDT pour compatibilité)
 _PAIR_TO_COINGECKO = {
+    # Paires EUR (Binance France / MiCA)
+    "BTC/EUR":   "bitcoin",
+    "ETH/EUR":   "ethereum",
+    "BNB/EUR":   "binancecoin",
+    "SOL/EUR":   "solana",
+    "XRP/EUR":   "ripple",
+    "DOGE/EUR":  "dogecoin",
+    "ADA/EUR":   "cardano",
+    "LTC/EUR":   "litecoin",
+    # Fallback USDT (pour market_memory et données historiques)
     "BTC/USDT":  "bitcoin",
     "ETH/USDT":  "ethereum",
     "BNB/USDT":  "binancecoin",
     "SOL/USDT":  "solana",
     "AVAX/USDT": "avalanche-2",
-    "MATIC/USDT":"matic-network",
     "XRP/USDT":  "ripple",
     "DOGE/USDT": "dogecoin",
     "ADA/USDT":  "cardano",
-    "DOT/USDT":  "polkadot",
-    "LINK/USDT": "chainlink",
     "LTC/USDT":  "litecoin",
-    "UNI/USDT":  "uniswap",
-    "ATOM/USDT": "cosmos",
-    "NEAR/USDT": "near",
-    "ARB/USDT":  "arbitrum",
-    "OP/USDT":   "optimism",
-    "SUI/USDT":  "sui",
-    "APT/USDT":  "aptos",
-    "INJ/USDT":  "injective-protocol",
 }
 
 # Mots clés positifs / négatifs pour l'analyse de sentiment basique

@@ -98,22 +98,24 @@ class TradingBot:
                 cap = float(open(config.BASE_DIR / "initial_capital.txt").read().strip())
             except Exception:
                 cap = 1000.0
-            logger.info(f"Capital initial (paper): {cap:.2f} USDT")
+            logger.info(f"Capital initial (paper): {cap:.2f} {config.QUOTE_CURRENCY}")
             return cap
         else:
             for attempt in range(6):
-                bal = self.exchange.get_balance("USDT")
+                bal = self.exchange.get_balance(config.QUOTE_CURRENCY)
                 if bal > 0:
-                    logger.info(f"Capital initial (live): {bal:.2f} USDT")
+                    logger.info(f"Capital initial (live): {bal:.2f} {config.QUOTE_CURRENCY}")
                     return bal
-                eur = self.exchange.get_balance("EUR")
-                if eur > 0:
-                    logger.warning(f"Solde EUR: {eur:.2f} EUR. Convertis en USDT sur Binance -> tentative {attempt+1}/6 dans 30s...")
-                    tg._send(f"Solde en EUR ({eur:.2f} EUR). Va sur Binance -> Actifs -> Convertir -> EUR vers USDT puis reviens.")
-                else:
-                    logger.warning(f"Solde USDT nul (tentative {attempt+1}/6). Verifier cles API. Attente 30s...")
+                logger.warning(
+                    f"Solde {config.QUOTE_CURRENCY} nul (tentative {attempt+1}/6). "
+                    f"Verifier cles API Binance. Attente 30s..."
+                )
+                tg._send(
+                    f"Solde {config.QUOTE_CURRENCY} nul (tentative {attempt+1}/6). "
+                    f"Verifiez les cles API et le solde sur Binance."
+                )
                 time.sleep(30)
-            logger.error("Impossible de recuperer le solde USDT. Arret.")
+            logger.error(f"Impossible de recuperer le solde {config.QUOTE_CURRENCY}. Arret.")
             sys.exit(1)
 
     # ─── Gestion des positions ouvertes ──────────────────────────────────────
@@ -147,8 +149,8 @@ class TradingBot:
                 if trade:
                     log_trade(trade)
                     tg._send(
-                        f"🎯 *TP Partiel* {pair} — vendu 50% @ {exit_price:.4f} | "
-                        f"PnL: {trade['pnl_usdt']:+.2f} USDT"
+                        f"TP Partiel {pair} — vendu 50% @ {exit_price:.4f} | "
+                        f"PnL: {trade['pnl_usdt']:+.4f} {config.QUOTE_CURRENCY}"
                     )
                     logger.info(f"[TP Partiel] {pair} — trailing actif sur le reste")
                 continue
