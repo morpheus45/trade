@@ -51,7 +51,7 @@ def alert_sell_close(pair: str, pnl: float, pnl_pct: float, reason: str, paper: 
     emoji = "✅" if pnl >= 0 else "❌"
     _send(
         f"{emoji} {tag}*POSITION FERMÉE* `{pair}`\n"
-        f"PnL: `{pnl:+.4f} USDT` (`{pnl_pct:+.2f}%`)\n"
+        f"PnL: `{pnl:+.4f} EUR` (`{pnl_pct:+.2f}%`)\n"
         f"Raison: `{reason}`"
     )
 
@@ -65,6 +65,6 @@ def alert_stats(stats: dict, paper: bool) -> None:
     _send(
         f"📊 *{tag}Stats journalières*\n"
         f"Trades: `{stats.get('trades', 0)}` | Win rate: `{stats.get('win_rate_pct', 0):.1f}%`\n"
-        f"PnL total: `{stats.get('total_pnl', 0):+.2f} USDT`\n"
-        f"Balance: `{stats.get('balance', 0):.2f} USDT` | ROI: `{stats.get('roi_pct', 0):+.2f}%`"
+        f"PnL total: `{stats.get('total_pnl', 0):+.2f} EUR`\n"
+        f"Balance: `{stats.get('balance', 0):.2f} EUR` | ROI: `{stats.get('roi_pct', 0):+.2f}%`"
     )

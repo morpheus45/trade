@@ -142,9 +142,9 @@ def _handle_command(cmd: str) -> str:
             return (
                 f"🤖 *Trading Bot — Status*\n"
                 f"Mode: {mode} | État: {paused}\n"
-                f"Capital initial: {init:.2f} USDT\n"
-                f"Capital actuel: {total:.2f} USDT\n"
-                f"P&L total: {pnl:+.2f} USDT ({pnl_pct:+.2f}%)\n"
+                f"Capital initial: {init:.2f} EUR\n"
+                f"Capital actuel: {total:.2f} EUR\n"
+                f"P&L total: {pnl:+.2f} EUR ({pnl_pct:+.2f}%)\n"
                 f"Positions ouvertes: {n_pos}/{config.MAX_OPEN_POSITIONS}\n"
                 f"Trades effectués: {stats.get('trades', 0)} | "
                 f"Win rate: {stats.get('win_rate_pct', 0):.1f}%"
@@ -180,10 +180,10 @@ def _handle_command(cmd: str) -> str:
                 f"(✅{stats['wins']} / ❌{stats['losses']})\n"
                 f"Win rate: {stats['win_rate_pct']:.1f}%\n"
                 f"Profit factor: {stats['profit_factor']:.2f}\n"
-                f"Avg gain: {stats['avg_win']:+.4f} USDT\n"
-                f"Avg perte: {stats['avg_loss']:+.4f} USDT\n"
-                f"Expectancy: {stats['expectancy']:+.4f} USDT/trade\n"
-                f"P&L total: {stats['total_pnl']:+.2f} USDT\n"
+                f"Avg gain: {stats['avg_win']:+.4f} EUR\n"
+                f"Avg perte: {stats['avg_loss']:+.4f} EUR\n"
+                f"Expectancy: {stats['expectancy']:+.4f} EUR/trade\n"
+                f"P&L total: {stats['total_pnl']:+.2f} EUR\n"
                 f"ROI: {stats['roi_pct']:+.2f}%"
             )
 

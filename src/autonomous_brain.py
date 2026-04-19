@@ -20,14 +20,26 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-import anthropic
+try:
+    import anthropic as _anthropic_module
+    _ANTHROPIC_PKG = True
+except ImportError:
+    _ANTHROPIC_PKG = False
+
+try:
+    from groq import Groq as _GroqClient
+    _GROQ_PKG = True
+except ImportError:
+    _GROQ_PKG = False
 
 try:
     import config
-    _API_KEY = config.ANTHROPIC_API_KEY
+    _API_KEY      = config.ANTHROPIC_API_KEY
+    _GROQ_API_KEY = config.GROQ_API_KEY
 except AttributeError:
     import os
-    _API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    _API_KEY      = os.getenv("ANTHROPIC_API_KEY", "")
+    _GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 try:
     from market_memory import MarketMemory
@@ -92,17 +104,56 @@ class AutonomousBrain:
             logger.warning("AutonomousBrain : web_researcher.py introuvable")
             self.researcher = None
 
-        # Client Anthropic
-        if not _API_KEY or _API_KEY.startswith("REMPLACE"):
-            logger.warning("AutonomousBrain : ANTHROPIC_API_KEY absent — décisions désactivées")
-            self.client = None
-        else:
-            self.client = anthropic.Anthropic(api_key=_API_KEY)
-            logger.info("AutonomousBrain : Claude %s prêt", MODEL_DECISION)
+        # Client IA : Groq en priorité (gratuit), Anthropic en fallback
+        self.client      = None
+        self._use_groq   = False
+
+        if _GROQ_PKG and _GROQ_API_KEY:
+            try:
+                self.client    = _GroqClient(api_key=_GROQ_API_KEY)
+                self._use_groq = True
+                logger.info("AutonomousBrain : Groq (llama-3.3-70b) pret — gratuit")
+            except Exception as e:
+                logger.warning("AutonomousBrain : Groq indisponible (%s)", e)
+
+        if self.client is None and _ANTHROPIC_PKG and _API_KEY and not _API_KEY.startswith("REMPLACE"):
+            try:
+                self.client    = _anthropic_module.Anthropic(api_key=_API_KEY)
+                self._use_groq = False
+                logger.info("AutonomousBrain : Claude %s pret (fallback Anthropic)", MODEL_DECISION)
+            except Exception as e:
+                logger.warning("AutonomousBrain : Anthropic indisponible (%s)", e)
+
+        if self.client is None:
+            logger.warning("AutonomousBrain : aucun client IA disponible — decisions desactivees")
 
         # Cache décisions (pair → (timestamp, decision_dict))
         self._decision_cache: dict = {}
         self.CACHE_TTL = 300  # 5 minutes
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Appel IA unifié : Groq ou Anthropic
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _call_ai(self, prompt: str, max_tokens: int = 1024) -> str:
+        """Appelle Groq (gratuit) ou Anthropic selon disponibilité."""
+        if self.client is None:
+            raise RuntimeError("Aucun client IA disponible")
+
+        if self._use_groq:
+            resp = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return resp.choices[0].message.content.strip()
+        else:
+            resp = self.client.messages.create(
+                model=MODEL_DECISION,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return resp.content[0].text.strip()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Méthode principale : decide()
@@ -213,12 +264,7 @@ class AutonomousBrain:
 
         decision = dict(_DEFAULT_DECISION)
         try:
-            response = self.client.messages.create(
-                model=MODEL_DECISION,
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw_text = response.content[0].text.strip()
+            raw_text = self._call_ai(prompt, max_tokens=1024)
             decision = self._parse_decision(raw_text)
             logger.info(
                 "[AutonomousBrain] %s → %s (conf=%.2f) | %s",
@@ -363,12 +409,7 @@ Sois concis, factuel et actionnable. Maximum 15 lignes. Format Telegram (pas de 
 """
 
         try:
-            response = self.client.messages.create(
-                model=MODEL_REFLECT,
-                max_tokens=800,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            report = response.content[0].text.strip()
+            report = self._call_ai(prompt, max_tokens=800)
 
             # Sauvegarder la réflexion dans la mémoire
             if self.memory:
@@ -491,12 +532,7 @@ Réponds UNIQUEMENT en JSON :
 }}"""
 
         try:
-            response = self.client.messages.create(
-                model=MODEL_REGIME,
-                max_tokens=256,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            data = self._parse_json(response.content[0].text.strip())
+            data = self._parse_json(self._call_ai(prompt, max_tokens=256))
             result = {
                 "regime":        data.get("regime", "uncertain"),
                 "confidence":    float(data.get("confidence", 0.5)),

@@ -52,6 +52,12 @@ except ImportError:
     _ANTHROPIC_AVAILABLE = False
 
 try:
+    from groq import Groq as _GroqClient
+    _GROQ_AVAILABLE = True
+except ImportError:
+    _GROQ_AVAILABLE = False
+
+try:
     from autonomous_brain import AutonomousBrain
     _BRAIN_AVAILABLE = True
 except ImportError:
@@ -74,9 +80,11 @@ except ImportError:
 
 try:
     import config as _config
-    _API_KEY = getattr(_config, "ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
+    _API_KEY      = getattr(_config, "ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
+    _GROQ_API_KEY = getattr(_config, "GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
 except Exception:
-    _API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    _API_KEY      = os.getenv("ANTHROPIC_API_KEY", "")
+    _GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,23 +166,29 @@ class ClaudeAnalyst:
     """
 
     def __init__(self):
-        # Vérifier la clé API
-        if not _API_KEY or _API_KEY.startswith("REMPLACE") or not _ANTHROPIC_AVAILABLE:
-            logger.warning("ClaudeAnalyst : ANTHROPIC_API_KEY absent ou package manquant — désactivé")
-            self._enabled = False
-            self._client = None
-            self.brain = None
-            self.memory = None
-            self.researcher = None
-            return
+        self._client    = None
+        self._use_groq  = False
 
-        # Client Anthropic direct (pour sentiment simple, urgences)
-        try:
-            self._client = Anthropic(api_key=_API_KEY)
-        except Exception as e:
-            logger.warning("ClaudeAnalyst : impossible de créer le client Anthropic (%s)", e)
+        # Groq en priorité (gratuit)
+        if _GROQ_AVAILABLE and _GROQ_API_KEY:
+            try:
+                self._client   = _GroqClient(api_key=_GROQ_API_KEY)
+                self._use_groq = True
+                logger.info("ClaudeAnalyst : Groq (llama-3.3-70b) actif — gratuit")
+            except Exception as e:
+                logger.warning("ClaudeAnalyst : Groq indisponible (%s)", e)
+
+        # Fallback Anthropic
+        if self._client is None and _ANTHROPIC_AVAILABLE and _API_KEY and not _API_KEY.startswith("REMPLACE"):
+            try:
+                self._client   = Anthropic(api_key=_API_KEY)
+                self._use_groq = False
+            except Exception as e:
+                logger.warning("ClaudeAnalyst : Anthropic indisponible (%s)", e)
+
+        if self._client is None:
+            logger.warning("ClaudeAnalyst : aucun client IA — desactive")
             self._enabled = False
-            self._client = None
             self.brain = None
             self.memory = None
             self.researcher = None
@@ -233,16 +247,24 @@ class ClaudeAnalyst:
     # ─── Appel Claude direct (pour fallback / sentiment / urgence) ────────────
 
     def _call(self, prompt: str, model: str = None, max_tokens: int = 512) -> str:
-        """Appel Claude avec gestion d'erreur centralisée."""
+        """Appel IA unifié : Groq ou Anthropic."""
         if self._client is None:
-            raise RuntimeError("Client Anthropic non initialisé")
-        model = model or MODEL_FAST
-        response = self._client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+            raise RuntimeError("Client IA non initialise")
+        if self._use_groq:
+            resp = self._client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return resp.choices[0].message.content.strip()
+        else:
+            model = model or MODEL_FAST
+            response = self._client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text.strip()
 
     def _parse_json(self, text: str) -> dict:
         """Extrait le JSON d'une réponse Claude même si entouré de texte."""

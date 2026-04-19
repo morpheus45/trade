@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent / ".env", override=True)
 
 # ─── Credentials Exchange ────────────────────────────────────────────────────
 # Accepte BINANCE_API_KEY ou API_KEY (compatibilité avec les deux nommages)
@@ -16,6 +16,10 @@ BINANCE_API_KEY    = (os.getenv("BINANCE_API_KEY") or
 BINANCE_API_SECRET = (os.getenv("BINANCE_API_SECRET") or
                       os.getenv("BINANCE_API_SECRET_1") or
                       os.getenv("API_SECRET", ""))
+
+# ─── Claude AI / Groq ────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
 
 # ─── Telegram ────────────────────────────────────────────────────────────────
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")

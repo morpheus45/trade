@@ -11,13 +11,26 @@ import config
 
 def setup_logging() -> logging.Logger:
     """Configure le logger global et retourne le logger root."""
+    import time
     config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_file = config.LOGS_DIR / "bot.log"
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s — %(message)s")
 
-    # Handler fichier
-    fh = logging.FileHandler(log_file, encoding="utf-8")
+    # Handler fichier — retry si le fichier est verrouille (Windows)
+    fh = None
+    for attempt in range(5):
+        try:
+            fh = logging.FileHandler(log_file, encoding="utf-8", delay=False)
+            break
+        except PermissionError:
+            time.sleep(attempt + 1)
+    if fh is None:
+        # Fichier alternatif horodate
+        ts = time.strftime("%H%M%S")
+        fh = logging.FileHandler(
+            config.LOGS_DIR / f"bot_{ts}.log", encoding="utf-8"
+        )
     fh.setFormatter(formatter)
     fh.setLevel(logging.DEBUG)
 
