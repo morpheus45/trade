@@ -85,7 +85,7 @@ def _open_log(log_file: Path):
 
 def _start_process(name: str, script: Path) -> subprocess.Popen:
     """Lance un processus Python et retourne le handle."""
-    log_file = LOG_DIR / f"{name}.log"
+    log_file = LOG_DIR / f"{name}_stdout.log"
     log_fh   = _open_log(log_file)
 
     env = os.environ.copy()
