@@ -83,7 +83,9 @@ class TradingBot:
         self.reporter.start()
 
         self._last_day          = datetime.now(timezone.utc).day
-        self._last_stats_hour   = -1
+        # Initialiser à l'heure actuelle pour éviter un snapshot immédiat au démarrage
+        # (évite les doublons si plusieurs processus démarrent simultanément)
+        self._last_stats_hour   = datetime.now(timezone.utc).hour
         self._last_scan: dict = {}
 
         claude_status = "actif" if self.claude.enabled else "désactivé"

@@ -67,10 +67,25 @@ def _load_portfolio_history() -> list[dict]:
         df = pd.read_csv(config.PORTFOLIO_CSV)
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
         df = df.dropna(subset=["timestamp", "total_value"])
+        df["total_value"] = pd.to_numeric(df["total_value"], errors="coerce")
+        df = df.dropna(subset=["total_value"])
+
+        # Filtrer les valeurs aberrantes dues aux processus concurrents :
+        # on garde uniquement les valeurs proches de la mediane (±60%)
+        if len(df) >= 5:
+            med = df["total_value"].median()
+            df = df[(df["total_value"] >= med * 0.40) & (df["total_value"] <= med * 2.0)]
+
+        # Dédoublonner par heure : garder 1 point par tranche de 5 minutes
+        df = df.sort_values("timestamp")
+        df["bucket"] = df["timestamp"].dt.floor("5min")
+        df = df.groupby("bucket", as_index=False).last()
+
         # Sous-échantillonner si trop de points (max 200 pour le graphique)
         if len(df) > 200:
             step = len(df) // 200
             df = df.iloc[::step]
+
         return [
             {"time": row["timestamp"].strftime("%d/%m %H:%M"), "value": round(float(row["total_value"]), 2)}
             for _, row in df.iterrows()
@@ -78,6 +93,32 @@ def _load_portfolio_history() -> list[dict]:
     except Exception as e:
         logger.error(f"Erreur lecture portfolio: {e}")
         return []
+
+
+def _portfolio_capitals_from_csv() -> tuple[float, float]:
+    """
+    Retourne (initial_capital, current_value) depuis portfolio.csv.
+    initial_capital = première valeur valide (quand le bot a démarré)
+    current_value   = dernière valeur valide
+    Filtre les valeurs aberrantes avant de choisir.
+    """
+    try:
+        df = pd.read_csv(config.PORTFOLIO_CSV)
+        df["total_value"] = pd.to_numeric(df["total_value"], errors="coerce")
+        df = df.dropna(subset=["total_value"])
+        if df.empty:
+            return 6.92, 6.92
+        # Filtrer les outliers (mêmes critères que _load_portfolio_history)
+        if len(df) >= 5:
+            med = df["total_value"].median()
+            df = df[(df["total_value"] >= med * 0.40) & (df["total_value"] <= med * 2.0)]
+        if df.empty:
+            return 6.92, 6.92
+        first = float(df["total_value"].iloc[0])
+        last  = float(df["total_value"].iloc[-1])
+        return first, last
+    except Exception:
+        return 6.92, 6.92
 
 
 def _compute_stats(trades: pd.DataFrame) -> dict:
@@ -134,17 +175,7 @@ def api_data():
     stats     = _compute_stats(trades)
 
     # Capital depuis le portfolio CSV si le bot n'est pas en memoire
-    def _capital_from_csv() -> float:
-        try:
-            df = pd.read_csv(config.PORTFOLIO_CSV)
-            if not df.empty:
-                return float(df["total_value"].iloc[-1])
-        except Exception:
-            pass
-        return 6.92   # valeur par defaut raisonnable
-
-    initial_capital = _capital_from_csv()
-    total_value     = initial_capital
+    initial_capital, total_value = _portfolio_capitals_from_csv()
     open_positions  = []
     trailing_states = {}
     paused          = False

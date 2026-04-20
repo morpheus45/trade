@@ -80,10 +80,10 @@ class AIChat:
             init  = self._portfolio.initial_capital
             roi   = (total - init) / init * 100
             lines.append(f"\n💰 PORTEFEUILLE:")
-            lines.append(f"  Capital initial : {init:.2f} USDT")
-            lines.append(f"  Capital actuel  : {total:.2f} USDT")
+            lines.append(f"  Capital initial : {init:.2f} EUR")
+            lines.append(f"  Capital actuel  : {total:.2f} EUR")
             lines.append(f"  ROI             : {roi:+.2f}%")
-            lines.append(f"  Cash disponible : {self._portfolio.quote_balance:.2f} USDT")
+            lines.append(f"  Cash disponible : {self._portfolio.quote_balance:.2f} EUR")
 
             # Positions ouvertes
             positions = self._portfolio.positions

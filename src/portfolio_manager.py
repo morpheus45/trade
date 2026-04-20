@@ -32,11 +32,11 @@ class Position:
 
     @property
     def cost(self) -> float:
-        """Valeur d'entrée en quote (USDT)."""
+        """Valeur d'entrée en quote (EUR)."""
         return self.entry_price * self.quantity
 
     def unrealized_pnl(self, current_price: float) -> float:
-        """P&L non réalisé en USDT (basé sur qty_remaining)."""
+        """P&L non réalisé en EUR (basé sur qty_remaining)."""
         qty = self.qty_remaining
         if self.side == "buy":
             return (current_price - self.entry_price) * qty
@@ -52,7 +52,7 @@ class Position:
 class PortfolioManager:
     """
     Gère :
-     - Solde en quote (USDT)
+     - Solde en quote (EUR)
      - Positions ouvertes
      - TP partiel (50% de la position vendue au premier TP)
      - Mise à jour du stop-loss (trailing)
@@ -175,7 +175,7 @@ class PortfolioManager:
         self.trade_history.append(trade)
         logger.info(
             f"🎯 TP PARTIEL [{pair}] sold {qty_to_sell:.6f} @ {exit_price:.4f} | "
-            f"PnL: {pnl:+.4f} USDT | Reste: {pos.qty_remaining:.6f}"
+            f"PnL: {pnl:+.4f} EUR | Reste: {pos.qty_remaining:.6f}"
         )
         return trade
 
@@ -238,7 +238,7 @@ class PortfolioManager:
         emoji = "✅" if pnl >= 0 else "❌"
         logger.info(
             f"{emoji} FERMETURE [{pair}] @ {exit_price:.4f} | "
-            f"PnL: {pnl:+.4f} USDT ({pnl_pct:+.2f}%) | raison: {reason}"
+            f"PnL: {pnl:+.4f} EUR ({pnl_pct:+.2f}%) | raison: {reason}"
         )
         return trade
 

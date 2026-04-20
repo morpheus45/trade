@@ -75,7 +75,7 @@ def log_portfolio_snapshot(balance: float, total_value: float, open_positions: i
 
     row = {
         "timestamp":       datetime.now(timezone.utc).isoformat(),
-        "balance_usdt":    round(balance, 4),
+        "balance_eur":     round(balance, 4),
         "total_value":     round(total_value, 4),
         "open_positions":  open_positions,
     }

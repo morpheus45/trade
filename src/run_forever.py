@@ -23,6 +23,33 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
+# ── Empecher Windows de se mettre en veille (SetThreadExecutionState) ─────────
+def _keep_awake_loop():
+    """
+    Appelle SetThreadExecutionState toutes les 30s pour signaler a Windows
+    que le systeme est actif. Fonctionne sans droits administrateur.
+    ES_CONTINUOUS (0x80000000) + ES_SYSTEM_REQUIRED (0x00000001) = 0x80000001
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS      = 0x80000000
+        ES_SYSTEM_REQUIRED = 0x00000001
+        ES_DISPLAY_REQUIRED = 0x00000002
+        KEEP_AWAKE_FLAGS   = ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+        kernel32 = ctypes.windll.kernel32
+        # Activer en permanence
+        kernel32.SetThreadExecutionState(KEEP_AWAKE_FLAGS)
+        while True:
+            kernel32.SetThreadExecutionState(KEEP_AWAKE_FLAGS)
+            time.sleep(30)
+    except Exception as e:
+        pass  # Ne jamais crasher le watchdog pour ca
+
+_awake_thread = threading.Thread(target=_keep_awake_loop, daemon=True, name="keep-awake")
+_awake_thread.start()
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 SRC_DIR       = Path(__file__).parent
 PYTHON        = sys.executable
