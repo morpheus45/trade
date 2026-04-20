@@ -179,8 +179,9 @@ def api_data():
     open_positions  = []
     trailing_states = {}
     paused          = False
-    ml_loaded       = False
-    claude_active   = False
+    # Valeurs de fallback basées sur les fichiers et la config (bot process séparé)
+    ml_loaded    = config.MODEL_PATH.exists() and config.MODEL_PATH.stat().st_size > 1000
+    claude_active = bool(config.GROQ_API_KEY or config.ANTHROPIC_API_KEY)
 
     if _bot_instance:
         try:
