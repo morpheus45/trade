@@ -124,18 +124,14 @@ echo [OK] Dossiers crees
 
 REM -- 6/8 : Fichier .env --
 echo [6/8] Configuration .env...
-(
-echo # === Trading Bot - Configuration ===
-echo BINANCE_API_KEY=%BINANCE_API_KEY%
-echo BINANCE_API_SECRET=%BINANCE_API_SECRET%
-echo API_KEY=%BINANCE_API_KEY%
-echo API_SECRET=%BINANCE_API_SECRET%
-echo TELEGRAM_BOT_TOKEN=%TELEGRAM_BOT_TOKEN%
-echo TELEGRAM_CHAT_ID=%TELEGRAM_CHAT_ID%
-echo ANTHROPIC_API_KEY=%ANTHROPIC_API_KEY%
-echo PAPER_TRADING=%PAPER_TRADING%
-) > "%INSTALL_DIR%\src\.env"
-echo [OK] .env configure
+if exist "%INSTALL_DIR%\src\.env" (
+    echo [OK] .env deja present -- conserve tel quel ^(cles API preservees^)
+) else (
+    echo [->] Creation .env depuis le modele...
+    copy "%INSTALL_DIR%\src\.env.example" "%INSTALL_DIR%\src\.env" >nul
+    echo [!] IMPORTANT: ouvre %INSTALL_DIR%\src\.env et remplis tes vraies cles API
+    notepad "%INSTALL_DIR%\src\.env"
+)
 
 REM -- 7/8 : Entrainement ML en arriere-plan --
 echo [7/8] Modele ML...
