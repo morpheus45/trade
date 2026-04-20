@@ -145,7 +145,7 @@
     <div class="card">
       <div class="card-title">💰 Capital</div>
       <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Actuel</div><div class="kpi-value neu" id="kpiCapital">—</div><div class="kpi-sub">USDT</div></div>
+        <div class="kpi"><div class="kpi-label">Actuel</div><div class="kpi-value neu" id="kpiCapital">—</div><div class="kpi-sub">EUR</div></div>
         <div class="kpi"><div class="kpi-label">P&L total</div><div class="kpi-value" id="kpiPnl">—</div><div class="kpi-sub" id="kpiRoi">—</div></div>
         <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value neu" id="kpiPositions">—</div><div class="kpi-sub" id="kpiMaxPos">—</div></div>
         <div class="kpi"><div class="kpi-label">Win rate</div><div class="kpi-value" id="kpiWinrate">—</div><div class="kpi-sub" id="kpiTrades">—</div></div>
@@ -272,7 +272,7 @@ function initChart(labels, data) {
       pointRadius: 0, tension: 0.3 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false },
-        tooltip: { callbacks: { label: c => c.parsed.y.toFixed(2) + ' USDT' } } },
+        tooltip: { callbacks: { label: c => c.parsed.y.toFixed(2) + ' EUR' } } },
       scales: { x: { display: false },
         y: { grid: { color: 'rgba(48,54,61,.5)' }, ticks: { color: '#8b949e', font: { size: 10 } } } } }
   });
@@ -347,7 +347,7 @@ async function refresh() {
             <div class="trade-info">${t.reason} · ${Math.round(t.duration_min)}min · ${new Date(t.closed_at).toLocaleDateString('fr')}</div>
           </div>
           <div class="trade-pnl ${cls}">
-            ${t.pnl_usdt >= 0 ? '+' : ''}${t.pnl_usdt.toFixed(2)} USDT
+            ${t.pnl_usdt >= 0 ? '+' : ''}${t.pnl_usdt.toFixed(2)} EUR
             <div class="trade-info">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%</div>
           </div>
         </div>`;

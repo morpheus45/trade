@@ -133,9 +133,18 @@ def api_data():
     portfolio = _load_portfolio_history()
     stats     = _compute_stats(trades)
 
-    # Capital et positions depuis le bot si disponible, sinon depuis les logs
-    initial_capital = 1000.0
-    total_value     = 1000.0
+    # Capital depuis le portfolio CSV si le bot n'est pas en memoire
+    def _capital_from_csv() -> float:
+        try:
+            df = pd.read_csv(config.PORTFOLIO_CSV)
+            if not df.empty:
+                return float(df["total_value"].iloc[-1])
+        except Exception:
+            pass
+        return 6.92   # valeur par defaut raisonnable
+
+    initial_capital = _capital_from_csv()
+    total_value     = initial_capital
     open_positions  = []
     trailing_states = {}
     paused          = False
