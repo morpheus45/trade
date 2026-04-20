@@ -50,6 +50,50 @@ def _keep_awake_loop():
 _awake_thread = threading.Thread(target=_keep_awake_loop, daemon=True, name="keep-awake")
 _awake_thread.start()
 
+# ── Verrou instance unique (PID file) ────────────────────────────────────────
+def _acquire_single_instance_lock() -> bool:
+    """
+    Verifie qu'une seule instance du watchdog tourne.
+    Si un autre watchdog est deja actif, tue les anciens processus bot/dashboard
+    orphelins puis quitte.
+    Returns True si on peut continuer, False si une instance est deja active.
+    """
+    pid_file = Path(__file__).parent.parent / "logs" / "watchdog.pid"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    my_pid = os.getpid()
+
+    # Lire le PID existant
+    if pid_file.exists():
+        try:
+            old_pid = int(pid_file.read_text().strip())
+            if old_pid != my_pid:
+                # Verifier si ce PID est encore vivant
+                try:
+                    if sys.platform == "win32":
+                        import ctypes
+                        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, old_pid)
+                        if handle:
+                            ctypes.windll.kernel32.CloseHandle(handle)
+                            # Le vieux watchdog tourne encore → on quitte
+                            print(f"[WATCHDOG] Deja actif (PID {old_pid}) - instance dupliquee, arret.", flush=True)
+                            return False
+                    else:
+                        os.kill(old_pid, 0)
+                        print(f"[WATCHDOG] Deja actif (PID {old_pid}) - arret.", flush=True)
+                        return False
+                except (OSError, ProcessLookupError):
+                    pass  # Le vieux PID n'existe plus
+        except Exception:
+            pass
+
+    # Ecrire notre PID
+    pid_file.write_text(str(my_pid))
+    return True
+
+
+if not _acquire_single_instance_lock():
+    sys.exit(0)
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 SRC_DIR       = Path(__file__).parent
 PYTHON        = sys.executable
