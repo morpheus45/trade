@@ -14,12 +14,17 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import anthropic
+try:
+    import anthropic
+    _ANTHROPIC_OK = True
+except ImportError:
+    _ANTHROPIC_OK = False
+
 import config
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """Tu es l'IA de gestion du bot de trading crypto de l'utilisateur.
 Tu as accès en temps réel à toutes les données du bot : portefeuille, positions ouvertes,
@@ -50,7 +55,10 @@ class AIChat:
     """
 
     def __init__(self):
-        self.enabled = bool(config.ANTHROPIC_API_KEY)
+        self.enabled = _ANTHROPIC_OK and bool(config.ANTHROPIC_API_KEY)
+        if not _ANTHROPIC_OK:
+            logger.warning("AIChat désactivé — package 'anthropic' non installé")
+            return
         if not self.enabled:
             logger.warning("AIChat désactivé — ANTHROPIC_API_KEY manquant")
             return
@@ -180,23 +188,21 @@ class AIChat:
 
         try:
             response = self.client.messages.create(
-                model   = MODEL,
+                model      = MODEL,
                 max_tokens = 1024,
-                system  = system,
-                messages = history,
+                system     = system,
+                messages   = history,
             )
             reply = response.content[0].text
-
-            # Sauvegarder la réponse dans l'historique
             history.append({"role": "assistant", "content": reply})
-
             return reply
 
-        except anthropic.APITimeoutError:
-            return "⏱️ Délai dépassé. Réessaie dans quelques secondes."
-        except anthropic.RateLimitError:
-            return "⚠️ Limite de tokens atteinte. Attends quelques secondes."
         except Exception as e:
+            name = type(e).__name__
+            if "Timeout" in name:
+                return "⏱️ Délai dépassé. Réessaie dans quelques secondes."
+            if "RateLimit" in name:
+                return "⚠️ Limite de tokens atteinte. Attends quelques secondes."
             logger.error(f"Erreur chat IA: {e}")
             return f"❌ Erreur: {str(e)}"
 

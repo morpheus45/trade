@@ -157,7 +157,7 @@ echo [OK] Raccourci bureau cree
 REM -- Lancement immediat --
 echo.
 echo [->] Lancement du bot...
-start "Trading Bot" /MIN cmd /c "cd /d "%INSTALL_DIR%" && "%PYTHON%" src\run_forever.py >> logs\bot.log 2>&1"
+start "Trading Bot" /MIN "%COMSPEC%" /c "cd /d ""%INSTALL_DIR%"" && ""%PYTHON%"" src\run_forever.py >> logs\bot.log 2>>&1"
 
 REM -- Ouverture dashboard local --
 echo [->] Ouverture du dashboard dans 8 secondes...
@@ -169,7 +169,7 @@ echo ====================================================
 echo    INSTALLATION TERMINEE
 echo ====================================================
 echo.
-echo  Mode      : LIVE ^(argent reel^) -- modifiable dans src\.env
+echo  Mode      : PAPER ^(simulation^) par defaut -- change dans src\.env
 echo  Bot       : en cours de demarrage
 echo  Dashboard : http://localhost:5000  ^(ouvert dans le navigateur^)
 echo.

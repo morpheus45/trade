@@ -11,7 +11,9 @@ logiciels/
 
 # Logs et données
 logs/
+!logs/.gitkeep
 data/
+!data/.gitkeep
 !docs/data/
 
 # Python
