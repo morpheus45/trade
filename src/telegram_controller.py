@@ -86,6 +86,7 @@ def _handle_command(cmd: str) -> str:
             "/pause → Suspendre le trading\n"
             "/resume → Reprendre le trading\n"
             "/stop → Arrêt propre du bot\n"
+            "/update → git pull + redémarrage automatique\n"
             "/help → Cette aide"
         )
 
@@ -120,6 +121,30 @@ def _handle_command(cmd: str) -> str:
         except Exception:
             pass
         return "🛑 *Arrêt du bot en cours...* À bientôt."
+
+    if cmd == "/update":
+        import subprocess, sys
+        from pathlib import Path
+        repo_dir = Path(__file__).parent.parent
+        try:
+            r = subprocess.run(
+                ["git", "pull", "--ff-only"],
+                cwd=str(repo_dir), capture_output=True, text=True, timeout=30
+            )
+            if r.returncode == 0:
+                msg = r.stdout.strip() or "Déjà à jour."
+                # Redémarrer le bot après pull
+                _stop_flag = True
+                try:
+                    import bot_trading
+                    bot_trading._RUNNING = False
+                except Exception:
+                    pass
+                return f"🔄 *Mise à jour appliquée :*\n{msg}\n\nBot en cours de redémarrage..."
+            else:
+                return f"⚠️ *git pull échoué :*\n{r.stderr.strip()}"
+        except Exception as e:
+            return f"❌ Erreur update: {e}"
 
     if cmd in ("/status", "/positions", "/stats"):
         if _bot_ref is None:

@@ -2,8 +2,8 @@
 src/.env
 *.env
 
-# Modèle ML (généré localement par train_xgboost.py)
-models/
+# Modèle ML — inclus dans git pour déploiement auto sur bot distant
+# models/  ← décommenté pour permettre le push du modèle entraîné
 !models/.gitkeep
 
 # Installeurs et logiciels
@@ -31,6 +31,7 @@ build/
 venv/
 env/
 .venv/
+.venv_train/
 
 # OS
 .DS_Store
