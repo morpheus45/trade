@@ -349,6 +349,46 @@ _train_lock   = _threading.Lock()
 _train_log    = config.LOGS_DIR / "ml_train.log"
 
 
+@app.route("/api/update", methods=["POST"])
+def api_update():
+    """
+    Fait un git pull et redémarre le bot (dashboard reste actif).
+    Appelé depuis le bouton 'Mise à jour' du dashboard.
+    """
+    import threading
+    from pathlib import Path
+
+    repo_dir = Path(__file__).parent.parent
+
+    def _do_update():
+        import time
+        try:
+            r = _sp.run(
+                ["git", "pull", "--ff-only"],
+                cwd=str(repo_dir), capture_output=True, text=True, timeout=30
+            )
+            logger.info(f"[UPDATE] {r.stdout.strip() or r.stderr.strip()}")
+        except Exception as e:
+            logger.warning(f"[UPDATE] git pull erreur: {e}")
+        # Tuer bot_trading.py (le watchdog le relancera avec le nouveau code)
+        time.sleep(2)
+        try:
+            import bot_trading
+            bot_trading._RUNNING = False
+            logger.info("[UPDATE] Bot redémarrage demandé.")
+        except Exception as e:
+            logger.warning(f"[UPDATE] signal bot: {e}")
+            # Fallback: kill process Python par nom
+            try:
+                _sp.run(["taskkill", "/f", "/fi", "WINDOWTITLE eq bot_trading*"],
+                        capture_output=True, timeout=5)
+            except Exception:
+                pass
+
+    _threading.Thread(target=_do_update, daemon=True).start()
+    return jsonify({"ok": True, "message": "Mise à jour en cours… Le bot redémarre dans ~5s."})
+
+
 @app.route("/api/train", methods=["POST"])
 def api_train():
     """Lance l'entraînement XGBoost en arrière-plan."""

@@ -178,7 +178,10 @@
     <div class="card">
       <div class="card-title">⚙️ Système</div>
       <div id="infoContent" style="line-height:2;font-size:13px">Chargement...</div>
-      <button class="train-btn idle" id="trainBtn" onclick="trainModel()">🧠 Entraîner le modèle ML</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="train-btn idle" id="trainBtn" onclick="trainModel()">🧠 Entraîner le modèle ML</button>
+        <button class="train-btn idle" id="updateBtn" onclick="updateBot()" style="background:rgba(188,140,255,.15);color:var(--purple);border-color:rgba(188,140,255,.3)">🔄 Mise à jour bot</button>
+      </div>
       <div class="train-log" id="trainLog"></div>
     </div>
   </div>
@@ -489,6 +492,30 @@ async function clearChat() {
         <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
       </div>
     </div>`;
+}
+
+// ── Bot Update ───────────────────────────────────────────────────────────────
+async function updateBot() {
+  const btn = document.getElementById('updateBtn');
+  const log = document.getElementById('trainLog');
+  btn.style.opacity = '0.6';
+  btn.innerHTML = '<span class="spin">🔄</span> Mise à jour…';
+  log.className = 'train-log visible';
+  log.textContent = 'git pull en cours…';
+  try {
+    const r = await fetch('/api/update', { method: 'POST' });
+    const d = await r.json();
+    log.textContent = d.message || 'OK';
+    btn.innerHTML = '✅ Mis à jour — redémarrage…';
+    setTimeout(() => {
+      btn.innerHTML = '🔄 Mise à jour bot';
+      btn.style.opacity = '1';
+    }, 8000);
+  } catch(e) {
+    log.textContent = '❌ Serveur inaccessible.';
+    btn.innerHTML = '🔄 Mise à jour bot';
+    btn.style.opacity = '1';
+  }
 }
 
 // ── ML Training ──────────────────────────────────────────────────────────────
