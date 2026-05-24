@@ -126,6 +126,17 @@
     .chat-send-btn:hover { background:#79b8ff; }
     .chat-send-btn:disabled { background:var(--border); cursor:not-allowed; }
     .chat-send-btn svg { width:16px; height:16px; fill:#fff; }
+
+    /* ─ ML Train button ─ */
+    .train-btn { display:inline-flex; align-items:center; gap:6px; margin-top:10px; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:all .2s; }
+    .train-btn.idle { background:rgba(88,166,255,.15); color:var(--blue); border:1px solid rgba(88,166,255,.3); }
+    .train-btn.idle:hover { background:rgba(88,166,255,.25); }
+    .train-btn.running { background:rgba(210,153,34,.15); color:var(--yellow); border:1px solid rgba(210,153,34,.3); cursor:default; }
+    .train-btn.done { background:rgba(63,185,80,.15); color:var(--green); border:1px solid rgba(63,185,80,.3); cursor:default; }
+    .train-log { font-size:10px; color:var(--muted); margin-top:8px; background:var(--bg); border-radius:6px; padding:8px; white-space:pre-wrap; max-height:120px; overflow-y:auto; display:none; }
+    .train-log.visible { display:block; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .spin { display:inline-block; animation:spin 1s linear infinite; }
   </style>
 </head>
 <body>
@@ -167,6 +178,8 @@
     <div class="card">
       <div class="card-title">⚙️ Système</div>
       <div id="infoContent" style="line-height:2;font-size:13px">Chargement...</div>
+      <button class="train-btn idle" id="trainBtn" onclick="trainModel()">🧠 Entraîner le modèle ML</button>
+      <div class="train-log" id="trainLog"></div>
     </div>
   </div>
 
@@ -477,6 +490,85 @@ async function clearChat() {
       </div>
     </div>`;
 }
+
+// ── ML Training ──────────────────────────────────────────────────────────────
+let _trainPollInterval = null;
+
+async function trainModel() {
+  const btn = document.getElementById('trainBtn');
+  const log = document.getElementById('trainLog');
+  if (btn.classList.contains('running') || btn.classList.contains('done')) return;
+
+  btn.className = 'train-btn running';
+  btn.innerHTML = '<span class="spin">⏳</span> Entraînement en cours…';
+  log.className = 'train-log visible';
+  log.textContent = 'Lancement de l\'entraînement XGBoost (~5-10 min)…';
+
+  try {
+    await fetch('/api/train', { method: 'POST' });
+  } catch(e) {
+    log.textContent = '❌ Serveur inaccessible.';
+    btn.className = 'train-btn idle';
+    btn.innerHTML = '🧠 Entraîner le modèle ML';
+    return;
+  }
+
+  // Poll status every 10 seconds
+  _trainPollInterval = setInterval(async () => {
+    try {
+      const r = await fetch('/api/train/status');
+      const d = await r.json();
+      if (d.log_tail) log.textContent = d.log_tail;
+      log.scrollTop = log.scrollHeight;
+      if (d.status === 'done') {
+        clearInterval(_trainPollInterval);
+        btn.className = 'train-btn done';
+        btn.innerHTML = '✅ Modèle ML entraîné !';
+        log.textContent = (d.log_tail || '') + '\n✅ Entraînement terminé !';
+      } else if (d.status === 'failed') {
+        clearInterval(_trainPollInterval);
+        btn.className = 'train-btn idle';
+        btn.innerHTML = '⚠️ Échec — réessayer';
+        log.textContent = (d.log_tail || '') + '\n❌ Entraînement échoué.';
+      }
+    } catch(e) {}
+  }, 10000);
+}
+
+// Si un entraînement tourne déjà au chargement, reprendre le polling
+(async () => {
+  try {
+    const r = await fetch('/api/train/status');
+    const d = await r.json();
+    const btn = document.getElementById('trainBtn');
+    const log = document.getElementById('trainLog');
+    if (d.status === 'running') {
+      btn.className = 'train-btn running';
+      btn.innerHTML = '<span class="spin">⏳</span> Entraînement en cours…';
+      log.className = 'train-log visible';
+      trainModel._polling = true;
+      _trainPollInterval = setInterval(async () => {
+        try {
+          const r2 = await fetch('/api/train/status');
+          const d2 = await r2.json();
+          if (d2.log_tail) log.textContent = d2.log_tail;
+          if (d2.status === 'done') {
+            clearInterval(_trainPollInterval);
+            btn.className = 'train-btn done';
+            btn.innerHTML = '✅ Modèle ML entraîné !';
+          } else if (d2.status === 'failed') {
+            clearInterval(_trainPollInterval);
+            btn.className = 'train-btn idle';
+            btn.innerHTML = '⚠️ Échec — réessayer';
+          }
+        } catch(e) {}
+      }, 10000);
+    } else if (d.status === 'done') {
+      btn.className = 'train-btn done';
+      btn.innerHTML = '✅ Modèle ML entraîné !';
+    }
+  } catch(e) {}
+})();
 
 // ── PWA Service Worker ───────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
