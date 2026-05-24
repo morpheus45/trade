@@ -20,6 +20,12 @@ try:
 except ImportError:
     _ANTHROPIC_OK = False
 
+try:
+    from groq import Groq as _GroqClient
+    _GROQ_OK = True
+except ImportError:
+    _GROQ_OK = False
+
 import config
 
 logger = logging.getLogger(__name__)
@@ -55,15 +61,33 @@ class AIChat:
     """
 
     def __init__(self):
-        self.enabled = _ANTHROPIC_OK and bool(config.ANTHROPIC_API_KEY)
-        if not _ANTHROPIC_OK:
-            logger.warning("AIChat désactivé — package 'anthropic' non installé")
-            return
-        if not self.enabled:
-            logger.warning("AIChat désactivé — ANTHROPIC_API_KEY manquant")
-            return
+        self._use_groq  = False
+        self._client_anthropic = None
+        self._client_groq      = None
 
-        self.client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        # Groq en priorité (gratuit, llama-3.3-70b)
+        if _GROQ_OK and getattr(config, "GROQ_API_KEY", ""):
+            try:
+                self._client_groq = _GroqClient(api_key=config.GROQ_API_KEY)
+                self._use_groq    = True
+                logger.info("AIChat : Groq (llama-3.3-70b) actif — gratuit")
+            except Exception as e:
+                logger.warning(f"AIChat : Groq indisponible ({e})")
+
+        # Anthropic en fallback
+        if _ANTHROPIC_OK and getattr(config, "ANTHROPIC_API_KEY", ""):
+            try:
+                self._client_anthropic = anthropic.Anthropic(
+                    api_key=config.ANTHROPIC_API_KEY
+                )
+                logger.info("AIChat : Anthropic disponible en fallback")
+            except Exception as e:
+                logger.warning(f"AIChat : Anthropic indisponible ({e})")
+
+        self.enabled = self._client_groq is not None or self._client_anthropic is not None
+        if not self.enabled:
+            logger.warning("AIChat désactivé — aucune clé IA valide (GROQ_API_KEY ou ANTHROPIC_API_KEY)")
+
         # Historique par session (session_id → list de messages)
         self._histories: dict[str, list] = {}
         self._max_history = 20  # messages max par session
@@ -186,25 +210,42 @@ class AIChat:
             history = history[-self._max_history * 2:]
             self._histories[session_id] = history
 
-        try:
-            response = self.client.messages.create(
-                model      = MODEL,
-                max_tokens = 1024,
-                system     = system,
-                messages   = history,
-            )
-            reply = response.content[0].text
-            history.append({"role": "assistant", "content": reply})
-            return reply
+        # ── Groq (gratuit, prioritaire) ──────────────────────────────────────
+        if self._client_groq:
+            try:
+                resp = self._client_groq.chat.completions.create(
+                    model      = "llama-3.3-70b-versatile",
+                    max_tokens = 1024,
+                    messages   = [{"role": "system", "content": system}] + history,
+                )
+                reply = resp.choices[0].message.content
+                history.append({"role": "assistant", "content": reply})
+                return reply
+            except Exception as e:
+                logger.warning(f"Groq chat échoué, fallback Anthropic: {e}")
 
-        except Exception as e:
-            name = type(e).__name__
-            if "Timeout" in name:
-                return "⏱️ Délai dépassé. Réessaie dans quelques secondes."
-            if "RateLimit" in name:
-                return "⚠️ Limite de tokens atteinte. Attends quelques secondes."
-            logger.error(f"Erreur chat IA: {e}")
-            return f"❌ Erreur: {str(e)}"
+        # ── Anthropic (fallback payant) ───────────────────────────────────────
+        if self._client_anthropic:
+            try:
+                response = self._client_anthropic.messages.create(
+                    model      = MODEL,
+                    max_tokens = 1024,
+                    system     = system,
+                    messages   = history,
+                )
+                reply = response.content[0].text
+                history.append({"role": "assistant", "content": reply})
+                return reply
+            except Exception as e:
+                name = type(e).__name__
+                if "Timeout" in name:
+                    return "⏱️ Délai dépassé. Réessaie dans quelques secondes."
+                if "RateLimit" in name or "credit" in str(e).lower():
+                    return "⚠️ Crédit Anthropic épuisé. Recharge sur anthropic.com/billing"
+                logger.error(f"Erreur chat Anthropic: {e}")
+                return f"❌ Erreur: {str(e)}"
+
+        return "❌ Aucune IA disponible (vérifie GROQ_API_KEY dans le .env)"
 
     def clear_history(self, session_id: str) -> None:
         """Efface l'historique d'une session."""

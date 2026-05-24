@@ -14,6 +14,7 @@ import logging
 import json
 import math
 import os
+import sys
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
@@ -334,6 +335,68 @@ def api_chat_history():
         for msg in history
     ]
     return jsonify({"history": formatted})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entraînement ML (déclenché depuis le dashboard)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import subprocess as _sp
+import threading as _threading
+
+_train_proc   = None   # processus d'entraînement en cours
+_train_lock   = _threading.Lock()
+_train_log    = config.LOGS_DIR / "ml_train.log"
+
+
+@app.route("/api/train", methods=["POST"])
+def api_train():
+    """Lance l'entraînement XGBoost en arrière-plan."""
+    global _train_proc
+    with _train_lock:
+        if _train_proc and _train_proc.poll() is None:
+            return jsonify({"status": "running", "message": "Entraînement déjà en cours…"})
+
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        train_script = Path(__file__).parent / "train_xgboost.py"
+        log_fh = open(_train_log, "w", encoding="utf-8", errors="replace")
+        _train_proc = _sp.Popen(
+            [sys.executable, str(train_script)],
+            cwd=str(Path(__file__).parent),
+            stdout=log_fh,
+            stderr=log_fh,
+        )
+        logger.info(f"Entraînement ML lancé (PID {_train_proc.pid})")
+        return jsonify({"status": "started", "message": "Entraînement démarré ✅ (~5-10 min)"})
+
+
+@app.route("/api/train/status", methods=["GET"])
+def api_train_status():
+    """Retourne l'état de l'entraînement et les dernières lignes de log."""
+    global _train_proc
+    model_ok = config.MODEL_PATH.exists() and config.MODEL_PATH.stat().st_size > 1000
+
+    if _train_proc is None:
+        status = "done" if model_ok else "not_started"
+    elif _train_proc.poll() is None:
+        status = "running"
+    else:
+        status = "done" if model_ok else "failed"
+
+    # Dernières lignes du log
+    lines = []
+    try:
+        if _train_log.exists():
+            with open(_train_log, encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()[-20:]
+    except Exception:
+        pass
+
+    return jsonify({
+        "status":    status,
+        "model_ok":  model_ok,
+        "log_tail":  "".join(lines),
+    })
 
 
 # ─────────────────────────────────────────────────────────────────────────────

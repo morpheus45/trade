@@ -110,6 +110,27 @@ DASHBOARD_PORT     = 5000
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Mise à jour automatique depuis GitHub ─────────────────────────────────────
+def _auto_update():
+    """git pull au démarrage pour récupérer les dernières corrections."""
+    try:
+        repo_dir = SRC_DIR.parent
+        result = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=str(repo_dir),
+            capture_output=True, text=True, timeout=30
+        )
+        if "Already up to date" in result.stdout:
+            logger.info("[UPDATE] Déjà à jour.")
+        elif result.returncode == 0:
+            logger.info(f"[UPDATE] Mise à jour appliquée:\n{result.stdout.strip()}")
+        else:
+            logger.warning(f"[UPDATE] git pull échoué (ignoré): {result.stderr.strip()}")
+    except Exception as e:
+        logger.warning(f"[UPDATE] Erreur git pull (ignoré): {e}")
+
+_auto_update()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [WATCHDOG] %(message)s",
