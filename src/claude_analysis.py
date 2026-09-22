@@ -14,9 +14,9 @@ Interface publique conservée :
   ClaudeAnalyst.emergency_analysis(reason, stats, positions) → str  (inchangé)
 
 Modèles utilisés :
-  claude-sonnet-4-6  → décisions trading (via AutonomousBrain)
-  claude-haiku-4-5-20251001 → sentiment simple (économie de tokens)
-  claude-opus-4-7    → urgences critiques (circuit breaker)
+  claude-sonnet-5  → décisions trading (via AutonomousBrain)
+  claude-haiku-4-5 → sentiment simple (économie de tokens)
+  claude-opus-5    → urgences critiques (circuit breaker)
 """
 
 import json
@@ -31,9 +31,9 @@ import requests
 logger = logging.getLogger(__name__)
 
 # ─── Modèles ──────────────────────────────────────────────────────────────────
-MODEL_FAST  = "claude-haiku-4-5-20251001"  # Sentiment simple, rapide et économique
-MODEL_DEEP  = "claude-sonnet-4-6"         # Validation de trade (via AutonomousBrain)
-MODEL_CRIT  = "claude-opus-4-7"           # Analyses d'urgence critiques
+MODEL_FAST  = "claude-haiku-4-5"  # Sentiment simple, rapide et économique
+MODEL_DEEP  = "claude-sonnet-5"         # Validation de trade (via AutonomousBrain)
+MODEL_CRIT  = "claude-opus-5"           # Analyses d'urgence critiques
 
 # ─── TTL caches ───────────────────────────────────────────────────────────────
 SENTIMENT_CACHE_TTL = 300   # 5 min
@@ -679,7 +679,7 @@ Focus: opportunités, risques du jour, contexte macro pertinent."""
     ) -> str:
         """
         Analyse approfondie déclenchée lors d'un circuit breaker.
-        Utilise claude-opus-4-6 pour une réflexion critique.
+        Utilise claude-opus-5 pour une réflexion critique.
         Conserve l'interface et le comportement de l'ancienne version.
 
         Args:

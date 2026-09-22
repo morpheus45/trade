@@ -3,7 +3,7 @@ autonomous_brain.py
 Cerveau IA central du bot de trading crypto.
 
 C'est lui qui prend TOUTES les décisions de manière autonome en combinant :
-  - Claude API (claude-sonnet-4-6) pour le raisonnement profond (Chain of Thought)
+  - Claude API (claude-sonnet-5) pour le raisonnement profond (Chain of Thought)
   - MarketMemory (SQLite) : situations similaires passées, sagesse, statistiques
   - WebResearcher : données temps réel (prix, news, funding rates, sentiment)
   - Indicateurs techniques calculés par le bot
@@ -55,9 +55,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-MODEL_DECISION  = "claude-sonnet-4-6"         # Décisions trading (raisonnement profond)
-MODEL_REFLECT   = "claude-sonnet-4-6"         # Réflexion journalière
-MODEL_REGIME    = "claude-haiku-4-5-20251001"  # Analyse régime marché (rapide)
+MODEL_DECISION  = "claude-sonnet-5"         # Décisions trading (raisonnement profond)
+MODEL_REFLECT   = "claude-sonnet-5"         # Réflexion journalière
+MODEL_REGIME    = "claude-haiku-4-5"  # Analyse régime marché (rapide)
 
 # Décision par défaut retournée en cas d'erreur Claude
 _DEFAULT_DECISION = {

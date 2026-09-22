@@ -30,7 +30,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 
 SYSTEM_PROMPT = """Tu es l'IA de gestion du bot de trading crypto de l'utilisateur.
 Tu as accès en temps réel à toutes les données du bot : portefeuille, positions ouvertes,
