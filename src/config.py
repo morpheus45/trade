@@ -28,6 +28,68 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─── Mode de fonctionnement ──────────────────────────────────────────────────
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
+# ─── Jev (TypeSafe AI) — couche de decision typee ────────────────────────────
+# https://docs.typesafe.ai  —  modele "System One" : questions typees, reponses
+# structurees avec probabilites calibrees, ~120 ms. Remplace ou complete la
+# validation par LLM, beaucoup plus lente et sans mesure d'incertitude.
+JEV_API_KEY = os.getenv("TYPESAFE_API_KEY", "")
+JEV_MODEL   = os.getenv("JEV_MODEL", "jev-latest")
+
+# Mode de fonctionnement :
+#   off      Jev n'est pas appele.
+#   shadow   Jev est appele et journalise, mais NE MODIFIE AUCUNE DECISION.
+#            Defaut volontaire : permet de mesurer sur des donnees reelles ce
+#            que Jev aurait filtre, sans rien risquer. A garder plusieurs jours.
+#   filter   Jev s'ajoute au pipeline existant comme veto supplementaire.
+#   primary  Jev remplace la validation LLM (qui devient le repli).
+JEV_MODE = os.getenv("JEV_MODE", "shadow").lower()
+
+# Comportement si Jev est injoignable :
+#   fallback  on retombe sur le pipeline existant (comportement actuel du bot)
+#   skip      on renonce au trade (echec ferme, plus prudent)
+JEV_ON_ERROR = os.getenv("JEV_ON_ERROR", "fallback").lower()
+
+# ── Seuils de decision ───────────────────────────────────────────────────────
+# La doc TypeSafe recommande d'indexer les seuils sur l'enjeu. Ici l'enjeu est
+# de l'argent reel : les seuils sont volontairement severes.
+JEV_MIN_CONFIDENCE          = float(os.getenv("JEV_MIN_CONFIDENCE", "0.65"))
+
+# ── Fiabilite : ne pas agir sur une reponse qui aurait pu basculer ───────────
+# TypeSafe mesure que Jev n'est pas deterministe : sur un cas limite il rejoue
+# son label majoritaire ~90,8 % du temps. Leur correctif, mesure, est d'exiger
+# une probabilite d'au moins 0,60 sur l'option retenue — l'accord entre
+# executions passe alors a 99,2 %, au prix de ~26 % de reponses ecartees.
+JEV_MIN_TOP_PROBABILITY = float(os.getenv("JEV_MIN_TOP_PROBABILITY", "0.60"))
+
+# Un Noul ne porte pas de confiance : c'est sa valeur qui exprime l'incertitude.
+# La doc transforme explicitement la plage 0,30-0,70 en resultat « incertain ».
+JEV_NOUL_UNCERTAIN_LOW  = float(os.getenv("JEV_NOUL_UNCERTAIN_LOW", "0.30"))
+JEV_NOUL_UNCERTAIN_HIGH = float(os.getenv("JEV_NOUL_UNCERTAIN_HIGH", "0.70"))
+
+# Nombre de questions pouvant rester incertaines sans invalider l'evaluation.
+# Au-dela, l'etat ne permet pas de trancher et on s'abstient.
+JEV_MAX_UNCERTAIN = int(os.getenv("JEV_MAX_UNCERTAIN", "3"))
+
+# Nombre de tirages par decision. 1 = un seul appel. Au-dela, l'accord unanime
+# est exige : un desaccord entre tirages vaut abstention. 3 est recommande en
+# argent reel — le cout reste negligeable, la latence passe a ~0,4 s.
+JEV_CONSENSUS_SAMPLES = int(os.getenv("JEV_CONSENSUS_SAMPLES", "1"))
+JEV_MIN_QUALITY             = float(os.getenv("JEV_MIN_QUALITY", "2.0"))   # sur 0..4
+JEV_VETO_THRESHOLD          = float(os.getenv("JEV_VETO_THRESHOLD", "0.70"))
+JEV_REGIME_VETO_CONFIDENCE  = float(os.getenv("JEV_REGIME_VETO_CONFIDENCE", "0.60"))
+
+# ── Modulation de la taille de position ──────────────────────────────────────
+JEV_SIZE_QUALITY_WEIGHT = float(os.getenv("JEV_SIZE_QUALITY_WEIGHT", "0.15"))
+JEV_SIZE_MIN            = float(os.getenv("JEV_SIZE_MIN", "0.60"))
+JEV_SIZE_MAX            = float(os.getenv("JEV_SIZE_MAX", "1.40"))
+
+# ── Coupe-circuit ────────────────────────────────────────────────────────────
+# La boucle tourne toutes les 30 s sur 8 paires : un appel qui traine coute plus
+# cher qu'un appel qui echoue. Jev repond normalement en ~120 ms.
+JEV_TIMEOUT_SECONDS  = float(os.getenv("JEV_TIMEOUT_SECONDS", "8"))
+JEV_MAX_FAILURES     = int(os.getenv("JEV_MAX_FAILURES", "3"))
+JEV_COOLDOWN_SECONDS = int(os.getenv("JEV_COOLDOWN_SECONDS", "900"))
+
 # ─── Capital de depart en mode PAPER ─────────────────────────────────────────
 # En LIVE, le capital est lu sur le compte Binance. En PAPER, il vient d'ici.
 # (Ordre de priorite : variable INITIAL_CAPITAL, puis initial_capital.txt.)

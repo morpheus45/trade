@@ -21,3 +21,8 @@ feedparser>=6.0.0
 # --- IA (optionnel : le bot tourne sans, en mode dégradé) ---
 groq>=0.9.0
 anthropic>=0.50.0
+
+# --- Jev / TypeSafe AI (optionnel : couche de décision typée) ---
+# Requiert Python >= 3.10. Sans ce paquet et sans TYPESAFE_API_KEY,
+# la couche Jev reste inactive et le bot fonctionne comme avant.
+typesafe-sdk>=0.7.0

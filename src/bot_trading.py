@@ -44,6 +44,8 @@ from indicators import add_all_indicators
 import telegram_alerts as tg
 import telegram_controller as tg_ctrl
 from state_store import StateStore
+import jev_decision
+from jev_decision import JevDecider
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -86,6 +88,7 @@ class TradingBot:
         self.claude     = ClaudeAnalyst()
         self.cb         = CircuitBreaker(self.portfolio.initial_capital)
         self.trailing   = TrailingStopManager()
+        self.jev        = JevDecider()
         self.last_briefing = ""
 
         self._last_day          = datetime.now(timezone.utc).day
@@ -310,12 +313,12 @@ class TradingBot:
                 )
                 continue
 
-            # ── Étape 5 : validation du setup (Claude) ────────────────────
-            should_trade, claude_reason = self.claude.validate_trade(
-                pair, signal_val, indicators_snapshot, sentiment
+            # ── Étape 5 : porte d'entrée (Jev et/ou validation LLM) ───────
+            should_trade, claude_reason, jev_size_mult = self._entry_gate(
+                pair, signal_val, signal_score, indicators_snapshot, sentiment
             )
             if not should_trade:
-                logger.info(f"[Claude Validation] {pair} rejeté: {claude_reason}")
+                logger.info(f"[Entrée refusée] {pair} : {claude_reason}")
                 continue
 
             # ── Calcul de la taille (adaptatif) ───────────────────────────
@@ -335,6 +338,25 @@ class TradingBot:
             if qty <= 0:
                 logger.warning(f"Taille nulle pour {pair}, skip")
                 continue
+
+            # Modulation de taille issue de Jev (1.0 = aucune modulation).
+            # Appliquee APRES calculate_adaptive_size, donc on revalide les
+            # bornes que cette fonction garantissait : plancher d'ordre Binance
+            # et plafond de capital par position.
+            if jev_size_mult != 1.0:
+                adjusted = qty * jev_size_mult
+                max_qty  = (self.portfolio.quote_balance * config.MAX_POSITION_PCT) / price
+                adjusted = min(adjusted, max_qty)
+                if adjusted * price < config.MIN_ORDER_EUR:
+                    logger.info(
+                        f"[Jev] {pair} : taille reduite a {adjusted * price:.2f} EUR, "
+                        f"sous le minimum Binance de {config.MIN_ORDER_EUR} EUR — trade abandonne"
+                    )
+                    continue
+                logger.info(
+                    f"[Jev] {pair} : taille {qty:.6f} -> {adjusted:.6f} (x{jev_size_mult:.2f})"
+                )
+                qty = adjusted
 
             # ── Passage de l'ordre ─────────────────────────────────────────
             order      = self.exchange.place_market_order(pair, "buy", qty)
@@ -368,6 +390,115 @@ class TradingBot:
                 tg._send(f"_{detail}_")
 
     # ─── Tâches périodiques ───────────────────────────────────────────────────
+
+    def _recent_performance_text(self, n: int = 5) -> str:
+        """Resume court des derniers trades, injecte dans l'etat envoye a Jev."""
+        closed = [t for t in self.portfolio.trade_history if t.get("reason") != "partial_tp"]
+        if not closed:
+            return "no closed trades yet"
+        last = closed[-n:]
+        wins = sum(1 for t in last if t.get("pnl_usdt", 0) > 0)
+        total = sum(t.get("pnl_usdt", 0) for t in last)
+        return (
+            f"last {len(last)} closed trades: {wins} winners, "
+            f"{len(last) - wins} losers, net {total:+.2f} EUR"
+        )
+
+    def _entry_gate(
+        self,
+        pair: str,
+        signal_val: str,
+        signal_score: float,
+        indicators: dict,
+        sentiment: dict,
+    ) -> tuple[bool, str, float]:
+        """
+        Decide si l'entree est autorisee, selon config.JEV_MODE.
+
+        Retourne (autorise, raison, multiplicateur_de_taille).
+
+        Les quatre modes existent parce qu'on n'introduit pas une nouvelle
+        source de decision dans un systeme qui engage de l'argent sans l'avoir
+        d'abord observee : `shadow` mesure sans rien changer, `filter` ajoute un
+        veto, `primary` confie la decision a Jev.
+        """
+        mode = config.JEV_MODE
+
+        def _llm_validate() -> tuple[bool, str]:
+            return self.claude.validate_trade(pair, signal_val, indicators, sentiment)
+
+        # ── Jev inactif : pipeline historique inchange ────────────────────────
+        if mode == "off" or not self.jev.enabled:
+            ok, reason = _llm_validate()
+            return ok, reason, 1.0
+
+        verdict = self.jev.evaluate_entry(
+            pair, signal_score, indicators, sentiment,
+            portfolio={
+                "open_positions": len(self.portfolio.positions),
+                "max_positions":  config.MAX_OPEN_POSITIONS,
+                "recent":         self._recent_performance_text(),
+            },
+        )
+
+        # ── Mode observation : Jev est interroge mais ne decide rien ──────────
+        if mode == "shadow":
+            ok, reason = _llm_validate()
+            jev_decision.log_decision(pair, verdict, acted=ok, mode=mode)
+            if verdict.available and verdict.approved != ok:
+                logger.info(
+                    f"[Jev observation] {pair} : divergence — "
+                    f"Jev={'ACCEPTE' if verdict.approved else 'REFUSE'}, "
+                    f"pipeline={'ACCEPTE' if ok else 'REFUSE'}"
+                )
+            return ok, reason, 1.0
+
+        # ── Jev injoignable ──────────────────────────────────────────────────
+        if not verdict.available:
+            if config.JEV_ON_ERROR == "skip":
+                jev_decision.log_decision(pair, verdict, acted=False, mode=mode)
+                return False, "Jev indisponible (JEV_ON_ERROR=skip)", 1.0
+            ok, reason = _llm_validate()
+            jev_decision.log_decision(pair, verdict, acted=ok, mode=mode)
+            return ok, f"Jev indisponible, repli LLM : {reason}", 1.0
+
+        # ── Jev en veto supplementaire ───────────────────────────────────────
+        # Une ABSTENTION n'est pas un veto : elle signifie que Jev n'a rien de
+        # fiable a dire sur ce cas. La confondre avec un refus reviendrait a
+        # laisser le filtre bloquer des trades sur une non-information.
+        if mode == "filter":
+            ok_llm, reason_llm = _llm_validate()
+            if verdict.outcome == "abstain":
+                jev_decision.log_decision(pair, verdict, acted=ok_llm, mode=mode)
+                return ok_llm, f"Jev sans avis ; LLM : {reason_llm}", 1.0
+            approved = ok_llm and verdict.approved
+            if not ok_llm:
+                raison = reason_llm
+            elif not verdict.approved:
+                raison = "Jev : " + " ; ".join(verdict.reasons)
+            else:
+                raison = "Jev + LLM d'accord"
+            jev_decision.log_decision(pair, verdict, acted=approved, mode=mode)
+            return approved, raison, (verdict.size_multiplier if approved else 1.0)
+
+        # ── Jev decide seul (le LLM n'est plus appele : c'est le gain) ────────
+        # Une abstention est traitee comme une indisponibilite : le modele dit
+        # qu'il ne sait pas, donc on applique la meme regle de repli.
+        if verdict.outcome == "abstain":
+            if config.JEV_ON_ERROR == "skip":
+                jev_decision.log_decision(pair, verdict, acted=False, mode=mode)
+                return False, "Jev sans avis fiable : " + " ; ".join(verdict.reasons), 1.0
+            ok, reason = _llm_validate()
+            jev_decision.log_decision(pair, verdict, acted=ok, mode=mode)
+            return ok, f"Jev sans avis fiable, repli LLM : {reason}", 1.0
+
+        jev_decision.log_decision(pair, verdict, acted=verdict.approved, mode=mode)
+        raison = " ; ".join(verdict.reasons) or "Jev accepte"
+        return (
+            verdict.approved,
+            raison,
+            verdict.size_multiplier if verdict.approved else 1.0,
+        )
 
     def _daily_reset(self) -> None:
         today = datetime.now(timezone.utc).day

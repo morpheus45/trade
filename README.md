@@ -3,8 +3,9 @@
 Bot de trading automatique tournant 24h/24 sur une machine dédiée, avec dashboard
 web protégé par mot de passe et accessible depuis le téléphone.
 
-Signal technique multi-indicateurs → filtre XGBoost → validation par IA → gestion
-du risque (stop ATR, trailing stop, take-profit partiel, circuit breaker).
+Signal technique multi-indicateurs → filtre XGBoost → décision typée Jev (ou
+validation LLM) → gestion du risque (stop ATR, trailing stop, take-profit
+partiel, circuit breaker).
 
 > **Le mode par défaut est `PAPER_TRADING=true` : le bot simule sans passer
 > d'ordre réel.** Laisse-le tourner plusieurs jours dans ce mode et vérifie ses
@@ -104,6 +105,8 @@ Tout se passe dans `src/.env` (copié depuis `src/.env.example`).
 | `BINANCE_API_KEY` / `_SECRET` | — | Droits « Lecture » + « Spot Trading », **jamais** les retraits |
 | `GROQ_API_KEY` | — | Optionnel, gratuit. Sans lui l'analyse IA est désactivée |
 | `TELEGRAM_BOT_TOKEN` / `_CHAT_ID` | — | Optionnel : alertes et commandes `/status` `/pause` |
+| `TYPESAFE_API_KEY` | — | Optionnel : active la couche de décision Jev |
+| `JEV_MODE` | `shadow` | `off` / `shadow` / `filter` / `primary` — voir plus bas |
 | `ALLOW_REMOTE_UPDATE` | `false` | Bouton « Mise à jour » (git pull + redémarrage) |
 | `ALLOW_REMOTE_TRAIN` | `true` | Bouton « Entraîner le modèle » |
 
@@ -115,6 +118,168 @@ breaker) sont dans `src/config.py`.
 Autorise **Lecture** et **Spot Trading**, rien d'autre. N'active jamais les
 retraits : une clé compromise ne doit pas pouvoir sortir de fonds. Restreins-la
 à l'adresse IP de la machine quand c'est possible.
+
+---
+
+## Couche de décision Jev (optionnelle)
+
+[Jev](https://docs.typesafe.ai) est un modèle « System One » de TypeSafe AI : au lieu
+de générer du texte, il répond à des **questions typées** par des valeurs
+structurées assorties de **probabilités calibrées**, en ~120 ms.
+
+Le bot demandait jusqu'ici à un LLM d'écrire une analyse, puis reparsait ce texte
+pour en extraire une décision. Trois défauts sur un bot de trading : plusieurs
+secondes par paire, un parsing fragile, et aucune mesure exploitable de
+l'incertitude. Jev remplace ce maillon.
+
+### Ce qu'on lui demande
+
+Plutôt qu'un « faut-il acheter ? », le bot pose huit questions indépendantes et
+les combine **dans le code** ([`src/jev_decision.py`](src/jev_decision.py)) :
+
+| Question | Type | Rôle |
+|---|---|---|
+| `regime` | Choice | uptrend / downtrend / range / choppy |
+| `setup_quality` | Score 0–4 | qualité de cette entrée précise |
+| `entry_timing` | Score 0–2 | le mouvement est-il déjà fait ? |
+| `trend_alignment` | Noul | 1 h et 4 h pointent dans le même sens |
+| `overextended` | Noul | risque de retour à la moyenne |
+| `volume_confirms` | Noul | le volume confirme le mouvement |
+| `elevated_risk` | Noul | conditions anormalement risquées |
+| `better_to_wait` | Noul | contrôle : la même question posée à l'envers |
+
+Toutes partent dans **un seul appel**, évaluées en parallèle et isolément. Quand
+tu veux durcir ou assouplir le filtre, tu changes un seuil dans `config.py` — pas
+un prompt.
+
+La `confidence` pilote l'action : sous `JEV_MIN_CONFIDENCE`, Jev dit en substance
+« je ne sais pas », et le bot s'abstient au lieu de deviner. Elle module aussi la
+taille de position, dans les bornes `JEV_SIZE_MIN`/`JEV_SIZE_MAX`.
+
+### Les quatre modes
+
+On n'introduit pas une nouvelle source de décision dans un système qui engage de
+l'argent sans l'avoir observée d'abord.
+
+| `JEV_MODE` | Comportement |
+|---|---|
+| `off` | Jev n'est pas appelé. |
+| **`shadow`** (défaut) | Jev est interrogé et journalisé, mais **ne change aucune décision**. |
+| `filter` | Jev s'ajoute comme veto au pipeline existant. |
+| `primary` | Jev décide seul ; le LLM n'est plus appelé. |
+
+**Commence en `shadow`.** Chaque évaluation part dans
+`logs/jev_decisions.jsonl`, avec ce que Jev aurait décidé et ce que le bot a
+réellement fait. Après quelques jours, compare :
+
+```bash
+python -c "import json;rows=[json.loads(l) for l in open('logs/jev_decisions.jsonl',encoding='utf-8')];d=[r for r in rows if r['available'] and r['approved']!=r['acted']];print(f'{len(rows)} evaluations, {len(d)} divergences');[print(' ',r['pair'],r['regime'],r['reasons']) for r in d[:10]]"
+```
+
+Passe à `filter`, puis éventuellement `primary`, seulement si ces divergences te
+donnent raison.
+
+### Fiabilité des décisions
+
+**Jev n'est pas déterministe, et TypeSafe le mesure publiquement** : sur un cas
+limite, il rejoue son label majoritaire 90,8 % du temps et change d'avis sur 2
+questions sur 8. Un bot de trading qui agirait sur ce genre de réponse prendrait
+des décisions différentes sur les mêmes données.
+
+Quatre mécanismes évitent cela. Les trois premiers viennent des mesures publiées
+par TypeSafe :
+
+**1. Plancher de probabilité.** Une réponse n'est exploitée que si l'option
+retenue porte au moins `JEV_MIN_TOP_PROBABILITY` (0,60) de la masse de
+probabilité. C'est le seuil pour lequel TypeSafe mesure **99,2 % d'accord entre
+exécutions**, contre 90,8 % sans. Le coût : environ un quart des réponses sont
+écartées.
+
+**2. Bande d'incertitude sur les Noul.** Un Noul ne porte pas de `confidence` —
+c'est sa valeur qui exprime l'incertitude. Entre 0,30 et 0,70, la réponse ne dit
+ni oui ni non et ne déclenche rien, ni veto ni validation.
+
+**3. Question de contrôle.** `better_to_wait` pose la même question à l'envers.
+Si Jev juge le setup bon *et* qu'il vaudrait mieux attendre, ses deux réponses se
+contredisent : rien de fiable à en tirer.
+
+**4. Accord entre tirages.** Avec `JEV_CONSENSUS_SAMPLES=3`, la question est
+posée trois fois et l'accord unanime est exigé. Des tirages divergents valent
+abstention — c'est précisément le cas où il ne faut pas agir. Coût : ×3 sur un
+budget déjà négligeable, latence ~0,4 s.
+
+### Trois états, pas deux
+
+La distinction compte :
+
+| Verdict | Sens | Effet |
+|---|---|---|
+| `approve` | conditions réunies | trade autorisé, mise modulée |
+| `reject` | condition disqualifiante **établie de façon fiable** | trade refusé |
+| `abstain` | Jev n'a rien de fiable à dire | pas un veto — voir ci-dessous |
+
+Une abstention n'est **pas** un refus. En mode `filter`, elle laisse le pipeline
+existant décider. En mode `primary`, elle déclenche `JEV_ON_ERROR` exactement
+comme une panne. Confondre les deux reviendrait à traiter « je ne sais pas »
+comme « non », et à croire le filtre plus informatif qu'il ne l'est.
+
+Un veto ne se déclenche jamais sur une réponse jugée non fiable : bloquer un
+trade sur une réponse instable serait aussi arbitraire que d'en prendre un.
+
+### Vérifier la fiabilité sur tes données
+
+Des seuils sévères ne sont pas de la fiabilité, juste de la sévérité. La
+fiabilité se mesure :
+
+```bash
+python tools/jev_report.py
+```
+
+Après quelques jours en `shadow`, le rapport répond à quatre questions :
+
+1. **Le filtre est-il exploitable ?** Plus de 60 % d'abstentions = seuils trop
+   sévères ; moins de 2 % = le garde-fou ne joue pas.
+2. **Où le modèle bute-t-il ?** Une question incertaine plus de 40 % du temps est
+   généralement mal posée, pas mal répondue.
+3. **Jev aurait-il amélioré les résultats ?** P&L réel contre P&L si Jev avait
+   filtré. Le rapport alerte si les trades **écartés** rapportaient mieux que les
+   trades retenus — le signe que le filtre coupe du bon signal.
+4. **Diverge-t-il du pipeline actuel ?** S'il est toujours d'accord, il n'apporte
+   rien.
+
+Sous ~30 trades appariés, le rapport te dit explicitement que l'écart n'est pas
+distinguable du hasard. **Ne change pas `JEV_MODE` sur un échantillon plus petit.**
+
+### Réglage recommandé avant l'argent réel
+
+```bash
+JEV_MODE=filter
+JEV_CONSENSUS_SAMPLES=3
+JEV_ON_ERROR=fallback
+```
+
+`filter` plutôt que `primary` : Jev peut écarter un trade, jamais en autoriser un
+que le pipeline existant aurait refusé.
+
+### Coût
+
+Environ 700 tokens d'entrée par évaluation, à 42 $ le milliard. Jev n'est
+interrogé qu'après les filtres technique et ML, donc au pire **~2 $/mois** sur
+huit paires — en pratique bien moins.
+
+Avec `JEV_CONSENSUS_SAMPLES=3`, le coût est multiplié par trois : **~6 $/mois au
+pire**. C'est le meilleur rapport fiabilité/prix de tout le dispositif.
+
+### Si Jev tombe
+
+Le bot ne s'arrête jamais à cause de Jev :
+
+- **clé invalide ou refusée** → couche désactivée, message explicite, pipeline habituel ;
+- **panne passagère** (timeout, rate limit, 5xx) → après 3 échecs, mise en sommeil 15 min ;
+- **appel échoué** → `JEV_ON_ERROR` décide : `fallback` (pipeline habituel) ou `skip` (aucun trade).
+
+Sans `TYPESAFE_API_KEY`, ou sans le paquet `typesafe-sdk`, la couche reste
+inactive et le bot se comporte exactement comme avant.
 
 ---
 
