@@ -4,6 +4,8 @@ Entraîné sur des features techniques réelles (voir train_xgboost.py).
 Utilisé comme filtre final : ne valide un signal que si le modèle est d'accord.
 """
 import logging
+import time
+
 import numpy as np
 import xgboost as xgb
 import config
@@ -14,11 +16,20 @@ logger = logging.getLogger(__name__)
 # Seuil de confiance minimum pour valider un signal
 CONFIDENCE_THRESHOLD = 0.60
 
+#: Intervalle entre deux verifications du fichier de modele. Un
+#: reentrainement peut promouvoir un nouveau champion a tout moment ; le
+#: recharger a chaud evite de redemarrer le bot, donc d'interrompre la
+#: surveillance des positions ouvertes.
+RELOAD_CHECK_SECONDS = 60
+
 
 class AIModel:
     def __init__(self):
         self.model: xgb.Booster | None = None
+        self._signature = (0.0, 0)
+        self._dernier_controle = 0.0
         self._load()
+        self._avertir_si_univers_different()
 
     def _load(self) -> None:
         """Charge le modèle depuis le fichier .json."""
@@ -33,10 +44,50 @@ class AIModel:
         try:
             self.model = xgb.Booster()
             self.model.load_model(str(model_path))
+            try:
+                import model_registry
+                self._signature = model_registry.signature_modele()
+            except Exception:
+                self._signature = (0.0, 0)
             logger.info(f"Modèle XGBoost chargé depuis {model_path}")
         except Exception as e:
             logger.error(f"Erreur chargement modèle: {e}")
             self.model = None
+
+    def _avertir_si_univers_different(self) -> None:
+        """
+        Signale un modele entraine sur d'autres paires que celles tradees.
+
+        Ses probabilites sur une paire inconnue sont une extrapolation, pas une
+        mesure : mieux vaut le savoir que de croire filtrer alors qu'on devine.
+        """
+        try:
+            import model_registry
+            change, details = model_registry.univers_a_change()
+        except Exception:
+            return
+        if change and self.model is not None:
+            logger.warning(
+                f"[ML] Le modele en place ne correspond pas aux paires tradees "
+                f"({details}). Lance « python src/retrain.py » pour le "
+                f"reentrainer sur l'univers courant."
+            )
+
+    def _recharger_si_change(self) -> None:
+        """Recharge le modele si un reentrainement l'a remplace."""
+        maintenant = time.time()
+        if maintenant - self._dernier_controle < RELOAD_CHECK_SECONDS:
+            return
+        self._dernier_controle = maintenant
+        try:
+            import model_registry
+            signature = model_registry.signature_modele()
+        except Exception:
+            return
+        if signature != self._signature and signature != (0.0, 0):
+            logger.info("[ML] Nouveau modele detecte — rechargement a chaud")
+            self._load()
+            self._avertir_si_univers_different()
 
     def predict(self, features: list[float]) -> tuple[str, float]:
         """
@@ -48,6 +99,8 @@ class AIModel:
         Returns:
             (signal, confidence) : signal = 'BUY'|'SELL'|'HOLD', confidence ∈ [0,1]
         """
+        self._recharger_si_change()
+
         if self.model is None:
             # Pas de modèle → on laisse passer le signal technique sans filtre
             return "BYPASS", 1.0

@@ -28,7 +28,10 @@ from indicators import add_all_indicators, ML_FEATURES
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-PAIRS         = ["BTC/EUR", "ETH/EUR", "BNB/EUR", "SOL/EUR", "XRP/EUR"]
+# Les paires d'entrainement sont CELLES QUE LE BOT TRADE, lues dans la config.
+# Avant, cette liste etait figee a 5 paires alors que le bot en tradait 8 :
+# DOGE, ADA et LTC etaient filtrees par un modele qui ne les avait jamais vues.
+PAIRS         = list(config.TRADE_PAIRS)
 TIMEFRAME     = "1h"
 LOOKAHEAD     = 4       # Bougies en avant pour le label
 TARGET_GAIN   = 0.01    # Gain minimum : +1%
@@ -155,13 +158,14 @@ def walk_forward_cv(X: np.ndarray, y: np.ndarray, params: dict, n_folds: int) ->
     return results
 
 
-def train_model(X: np.ndarray, y: np.ndarray) -> tuple:
+def build_params(y: np.ndarray) -> dict:
     """
-    Entraîne XGBoost avec Walk-Forward CV.
-    Retourne (modèle final, mean_auc).
+    Parametres XGBoost, optimises pour des donnees crypto : non
+    stationnaires et tres bruitees. Extraits ici pour que le
+    reentrainement (model_registry) entraine son challenger dans
+    exactement les memes conditions que le champion.
     """
-    # Paramètres optimisés pour données crypto (non-stationnaires, bruit élevé)
-    params = {
+    return {
         "objective":         "binary:logistic",
         "eval_metric":       "auc",
         "eta":               0.03,          # Learning rate plus faible → moins d'overfitting
@@ -175,6 +179,14 @@ def train_model(X: np.ndarray, y: np.ndarray) -> tuple:
         "scale_pos_weight":  (y == 0).sum() / max((y == 1).sum(), 1),
         "seed":              42,
     }
+
+
+def train_model(X: np.ndarray, y: np.ndarray) -> tuple:
+    """
+    Entraîne XGBoost avec Walk-Forward CV.
+    Retourne (modèle final, mean_auc).
+    """
+    params = build_params(y)
 
     logger.info(f"Walk-Forward CV {N_FOLDS} folds sur {len(X)} samples...")
     results  = walk_forward_cv(X, y, params, N_FOLDS)

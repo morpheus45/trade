@@ -132,22 +132,57 @@ ALLOW_REMOTE_UPDATE = os.getenv("ALLOW_REMOTE_UPDATE", "false").lower() == "true
 # Autorise le declenchement de l'entrainement ML depuis le dashboard.
 ALLOW_REMOTE_TRAIN = os.getenv("ALLOW_REMOTE_TRAIN", "true").lower() == "true"
 
-# ─── Devise de cotation ──────────────────────────────────────────────────────
-# EUR obligatoire pour Binance France (MiCA — USDT restreint)
-QUOTE_CURRENCY = "EUR"
-
-# ─── Paires tradées ──────────────────────────────────────────────────────────
-# Paires EUR disponibles sur Binance France
-TRADE_PAIRS = [
-    "BTC/EUR",    # Roi du marché — signal de tendance macro
+# ─── Paires tradees et devise de cotation ────────────────────────────────────
+# Modifiables sans toucher au code : TRADE_PAIRS dans le .env, en liste separee
+# par des virgules. Le modele ML doit etre reentraine sur les MEMES paires —
+# un modele qui n'a jamais vu une paire n'a rien d'utile a en dire.
+#   TRADE_PAIRS=BTC/EUR,ETH/EUR,SOL/EUR
+#   TRADE_PAIRS=BTC/USDT,ETH/USDT
+_PAIRES_DEFAUT = [
+    "BTC/EUR",    # Roi du marche — signal de tendance macro
     "ETH/EUR",    # DeFi / altseason leader
     "BNB/EUR",    # BNB Chain ecosystem
     "SOL/EUR",    # Layer 1 haute performance
-    "XRP/EUR",    # Haute liquidité, corrélation modérée BTC
+    "XRP/EUR",    # Haute liquidite, correlation moderee BTC
     "DOGE/EUR",   # Momentum / sentiment driven
     "ADA/EUR",    # Cardano
     "LTC/EUR",    # Litecoin
 ]
+
+
+def _lire_paires() -> list[str]:
+    """
+    Lit TRADE_PAIRS et refuse une liste incoherente.
+
+    Toutes les paires doivent partager la meme devise de cotation : le solde,
+    le capital, les frais et le plancher d'ordre sont exprimes dans cette
+    devise. Melanger EUR et USDT ferait additionner des montants qui n'ont pas
+    la meme unite.
+    """
+    brut = os.getenv("TRADE_PAIRS", "").strip()
+    if not brut:
+        return list(_PAIRES_DEFAUT)
+
+    paires = [p.strip().upper() for p in brut.split(",") if p.strip()]
+    invalides = [p for p in paires if "/" not in p]
+    if invalides:
+        raise SystemExit(
+            f"TRADE_PAIRS : format attendu « BASE/QUOTE », recu {invalides}"
+        )
+
+    quotes = {p.split("/", 1)[1] for p in paires}
+    if len(quotes) > 1:
+        raise SystemExit(
+            f"TRADE_PAIRS melange plusieurs devises de cotation ({sorted(quotes)}). "
+            f"Le capital et les frais sont exprimes dans une seule devise : "
+            f"n'en garder qu'une."
+        )
+    return paires
+
+
+TRADE_PAIRS    = _lire_paires()
+# Deduite des paires : elle ne peut pas en diverger.
+QUOTE_CURRENCY = TRADE_PAIRS[0].split("/", 1)[1]
 
 # ─── Timeframes ───────────────────────────────────────────────────────────────
 TIMEFRAME_PRIMARY = "1h"    # Signal d'entrée — indicateurs techniques
@@ -163,8 +198,12 @@ STOP_LOSS_ATR_MULT    = 1.5    # Stop = 1.5 × ATR
 TAKE_PROFIT_ATR_MULT  = 3.0    # TP = 3.0 × ATR → ~2-3% gain typique >> 0.2% fees
 MAX_OPEN_POSITIONS    = 1      # Petit capital : 1 position à la fois
 # Binance minimum order value (EUR)
-MIN_ORDER_EUR         = 5.0    # Refuser les ordres < 5 EUR notional
-MIN_ORDER_USDT        = 5.0    # Alias compat (ne pas supprimer)
+# Plancher exprime dans la devise de cotation, quelle qu'elle soit. Binance
+# impose un notionnel minimum qui depend de la paire : a ajuster si l'exchange
+# refuse des ordres pour « NOTIONAL ».
+MIN_ORDER_QUOTE       = float(os.getenv("MIN_ORDER_QUOTE", "5.0"))
+MIN_ORDER_EUR         = MIN_ORDER_QUOTE   # noms historiques, conserves
+MIN_ORDER_USDT        = MIN_ORDER_QUOTE
 MAX_POSITION_PCT      = 0.90   # Max 90% du capital par trade (petit compte)
 # Profit minimum net de frais pour valider un trade
 MIN_PROFIT_AFTER_FEES = 2 * BINANCE_FEE_PCT  # 0.2% minimum absolu
