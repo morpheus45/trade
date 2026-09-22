@@ -103,6 +103,13 @@ except ValueError:
 # une interface autre que la boucle locale (voir main.py).
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 
+# Jeton pour les clients machine (agent-os, supervision, scripts). Presente en
+# en-tete « Authorization: Bearer <jeton> », il ouvre les endpoints /api/ sans
+# session ni mot de passe. Distinct du mot de passe a dessein : il se revoque
+# et se remplace sans deconnecter les navigateurs, et un programme tiers n'a
+# jamais a detenir le secret qui ouvre l'interface complete.
+DASHBOARD_API_TOKEN = os.getenv("DASHBOARD_API_TOKEN", "")
+
 # Interface d'ecoute. 127.0.0.1 = accessible uniquement depuis la machine ;
 # 0.0.0.0 = accessible depuis le reseau (a reserver aux cas ou un tunnel ou un
 # reverse proxy se charge de l'exposition).

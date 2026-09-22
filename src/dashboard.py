@@ -319,6 +319,47 @@ def healthz():
 # Chat IA
 # ─────────────────────────────────────────────────────────────────────────────
 
+@app.route("/api/control", methods=["POST"])
+@login_required
+def api_control():
+    """
+    Suspend ou reprend la recherche de nouvelles entrees.
+
+    En pause, les positions deja ouvertes continuent d'etre gerees — stop-loss,
+    trailing et take-profit restent actifs. Mettre en pause reduit le risque ;
+    cela n'abandonne jamais une position en cours.
+
+    Volontairement limite a ces deux actions : ni passage en mode reel, ni
+    ouverture ou fermeture de position. Un appelant automatise doit pouvoir
+    calmer le bot, jamais engager de l'argent a sa place.
+    """
+    data = request.get_json(silent=True) or {}
+    action = str(data.get("action", "")).strip().lower()
+    if action not in ("pause", "resume"):
+        return jsonify({
+            "ok": False,
+            "error": "action attendue : 'pause' ou 'resume'",
+        }), 400
+
+    try:
+        import bot_trading
+        bot_trading.set_paused(action == "pause")
+        paused = bot_trading._PAUSED
+    except Exception as exc:
+        logger.error(f"[control] {action} impossible : {exc}")
+        return jsonify({"ok": False, "error": f"bot injoignable : {exc}"}), 503
+
+    logger.info(f"[control] {action} demande via l'API")
+    return jsonify({
+        "ok": True,
+        "paused": paused,
+        "message": ("Recherche de nouvelles entrees suspendue ; les positions "
+                    "ouvertes restent gerees."
+                    if paused else
+                    "Recherche de nouvelles entrees reprise."),
+    })
+
+
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def api_chat():

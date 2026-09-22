@@ -341,6 +341,165 @@ def _():
         config.DASHBOARD_PASSWORD = pw
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+print("\n5. Jeton machine (clients automatises)")
+# ─────────────────────────────────────────────────────────────────────────────
+
+JETON = "jeton-de-test-pour-agent-os-32-caracteres-minimum"
+
+
+def _avec_jeton(jeton=JETON):
+    """Active un jeton machine le temps d'un test."""
+    import config
+    ancien = config.DASHBOARD_API_TOKEN
+    config.DASHBOARD_API_TOKEN = jeton
+    return ancien
+
+
+def _sans_jeton(ancien):
+    import config
+    config.DASHBOARD_API_TOKEN = ancien
+
+
+@test("un jeton valide ouvre les endpoints /api/")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        r = client.get("/api/data", headers={"Authorization": f"Bearer {JETON}"})
+        assert r.status_code == 200, f"jeton valide refuse ({r.status_code})"
+    finally:
+        _sans_jeton(ancien)
+
+
+@test("un jeton invalide est refuse")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        r = client.get("/api/data", headers={"Authorization": "Bearer mauvais-jeton"})
+        assert r.status_code == 401, f"attendu 401, recu {r.status_code}"
+    finally:
+        _sans_jeton(ancien)
+        auth._failures.clear(); auth._locked.clear()
+
+
+@test("un jeton trop court est refuse meme s'il correspond")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    court = "court"
+    ancien = _avec_jeton(court)
+    try:
+        client = dashboard.app.test_client()
+        r = client.get("/api/data", headers={"Authorization": f"Bearer {court}"})
+        assert r.status_code == 401, (
+            "un jeton de 5 caracteres a ete accepte — authentification de facade"
+        )
+    finally:
+        _sans_jeton(ancien)
+        auth._failures.clear(); auth._locked.clear()
+
+
+@test("le jeton n'ouvre pas les pages, seulement /api/")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        r = client.get("/", headers={"Authorization": f"Bearer {JETON}"})
+        assert r.status_code == 302, (
+            f"le jeton a ouvert une page ({r.status_code}) — sa portee doit se "
+            f"limiter aux endpoints machine"
+        )
+    finally:
+        _sans_jeton(ancien)
+
+
+@test("les jetons errones comptent dans le blocage anti-force-brute")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        for _i in range(auth.MAX_ATTEMPTS):
+            client.get("/api/data", headers={"Authorization": "Bearer faux"})
+        r = client.get("/api/data", headers={"Authorization": f"Bearer {JETON}"})
+        assert r.status_code == 429, (
+            f"attendu 429 apres {auth.MAX_ATTEMPTS} jetons errones, recu {r.status_code}"
+        )
+    finally:
+        _sans_jeton(ancien)
+        auth._failures.clear(); auth._locked.clear()
+
+
+@test("sans jeton configure, seul le mot de passe ouvre l'API")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    client = dashboard.app.test_client()
+    r = client.get("/api/data", headers={"Authorization": "Bearer nimporte-quoi"})
+    assert r.status_code == 401, f"attendu 401, recu {r.status_code}"
+
+
+@test("/api/control met en pause et reprend")
+def _():
+    import auth, dashboard, bot_trading
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        entetes = {"Authorization": f"Bearer {JETON}"}
+
+        r = client.post("/api/control", json={"action": "pause"}, headers=entetes)
+        assert r.status_code == 200, f"pause refusee ({r.status_code})"
+        assert r.get_json()["paused"] is True
+        assert bot_trading._PAUSED is True, "l'etat du bot n'a pas change"
+
+        r = client.post("/api/control", json={"action": "resume"}, headers=entetes)
+        assert r.get_json()["paused"] is False
+        assert bot_trading._PAUSED is False
+    finally:
+        try:
+            import bot_trading as bt
+            bt.set_paused(False)
+        except Exception:
+            pass
+        _sans_jeton(ancien)
+
+
+@test("/api/control refuse toute action autre que pause et resume")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    ancien = _avec_jeton()
+    try:
+        client = dashboard.app.test_client()
+        entetes = {"Authorization": f"Bearer {JETON}"}
+        for action in ("buy", "sell", "go_live", "close_all", ""):
+            r = client.post("/api/control", json={"action": action}, headers=entetes)
+            assert r.status_code == 400, (
+                f"l'action « {action} » a ete acceptee ({r.status_code}) — "
+                f"un appelant automatise ne doit jamais pouvoir engager d'argent"
+            )
+    finally:
+        _sans_jeton(ancien)
+
+
+@test("/api/control reste inaccessible sans authentification")
+def _():
+    import auth, dashboard
+    auth._failures.clear(); auth._locked.clear()
+    client = dashboard.app.test_client()
+    r = client.post("/api/control", json={"action": "pause"})
+    assert r.status_code == 401, f"attendu 401, recu {r.status_code}"
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 62)
 total = len(_passed) + len(_failed)

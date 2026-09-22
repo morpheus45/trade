@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 SESSION_KEY = "authenticated"
 
+#: Longueur minimale d'un jeton machine (32 caracteres aleatoires).
+MIN_TOKEN_LENGTH = 32
+
 # Anti-force-brute : au-dela de MAX_ATTEMPTS echecs dans FAIL_WINDOW secondes,
 # l'IP est bloquee pendant LOCKOUT secondes.
 MAX_ATTEMPTS = 5
@@ -88,6 +91,30 @@ def password_configured() -> bool:
 
 def _digest(value: str) -> bytes:
     return hashlib.sha256(value.encode("utf-8")).digest()
+
+
+def api_token_configured() -> bool:
+    return bool(config.DASHBOARD_API_TOKEN)
+
+
+def check_api_token(candidate: str) -> bool:
+    """
+    Verifie un jeton machine, en temps constant.
+
+    Un jeton trop court serait devinable : on refuse plutot que d'offrir une
+    authentification de facade a un programme qui se croit protege.
+    """
+    token = config.DASHBOARD_API_TOKEN
+    if not token or len(token) < MIN_TOKEN_LENGTH:
+        return False
+    return hmac.compare_digest(_digest(candidate), _digest(token))
+
+
+def _bearer_token() -> str:
+    """Extrait le jeton de l'en-tete Authorization, vide s'il n'y en a pas."""
+    header = request.headers.get("Authorization", "")
+    prefix = "Bearer "
+    return header[len(prefix):].strip() if header.startswith(prefix) else ""
 
 
 def check_password(candidate: str) -> bool:
@@ -161,6 +188,23 @@ def login_required(view):
     def wrapper(*args, **kwargs):
         if session.get(SESSION_KEY):
             return view(*args, **kwargs)
+
+        # Clients machine : un jeton porteur ouvre les endpoints /api/, jamais
+        # les pages. Un programme n'a pas besoin de l'interface, et limiter la
+        # portee du jeton reduit ce qu'une fuite permettrait.
+        if request.path.startswith("/api/") and api_token_configured():
+            presente = _bearer_token()
+            if presente:
+                ip = _client_ip()
+                if is_locked(ip):
+                    return jsonify({"error": "Trop de tentatives"}), 429
+                if check_api_token(presente):
+                    return view(*args, **kwargs)
+                # Un jeton errone est compte comme un echec : sans cela, le
+                # blocage anti-force-brute ne couvrirait que le formulaire.
+                record_failure(ip)
+                return jsonify({"error": "Jeton invalide"}), 401
+
         if request.path.startswith("/api/"):
             return jsonify({"error": "Authentification requise"}), 401
         return redirect(url_for("login", next=request.path))
