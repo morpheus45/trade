@@ -1,0 +1,31 @@
+# Secrets — ne doivent jamais entrer dans une image
+src/.env
+*.env
+data/secret_key
+
+# Etat local : appartient a la machine, pas a l'image
+data/
+logs/
+initial_capital.txt
+
+# Environnements et caches Python
+venv/
+.venv/
+.venv_train/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Outils et OS
+.git/
+.github/
+.idea/
+.vscode/
+.DS_Store
+desktop.ini
+Thumbs.db
+
+# Scripts specifiques a une plateforme, inutiles dans l'image
+deploy/
+*.ps1
+*.bat

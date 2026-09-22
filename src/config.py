@@ -28,6 +28,41 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # ─── Mode de fonctionnement ──────────────────────────────────────────────────
 PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
+# ─── Capital de depart en mode PAPER ─────────────────────────────────────────
+# En LIVE, le capital est lu sur le compte Binance. En PAPER, il vient d'ici.
+# (Ordre de priorite : variable INITIAL_CAPITAL, puis initial_capital.txt.)
+try:
+    INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "") or 0) or None
+except ValueError:
+    INITIAL_CAPITAL = None
+
+# ─── Dashboard : reseau et securite ──────────────────────────────────────────
+# Mot de passe d'acces au dashboard. Sans lui, le dashboard refuse d'ecouter sur
+# une interface autre que la boucle locale (voir main.py).
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+
+# Interface d'ecoute. 127.0.0.1 = accessible uniquement depuis la machine ;
+# 0.0.0.0 = accessible depuis le reseau (a reserver aux cas ou un tunnel ou un
+# reverse proxy se charge de l'exposition).
+DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+DASHBOARD_PORT = int(os.getenv("PORT") or os.getenv("DASHBOARD_PORT") or 5000)
+
+# A activer uniquement derriere un reverse proxy de confiance (Cloudflare Tunnel,
+# Caddy, nginx). Fait lire l'IP client dans X-Forwarded-For ; sans proxy devant,
+# cet en-tete est falsifiable et permettrait de contourner le blocage anti-brute-force.
+TRUST_PROXY = os.getenv("TRUST_PROXY", "false").lower() == "true"
+
+# Duree de validite d'une session ouverte (en jours).
+SESSION_DAYS = int(os.getenv("SESSION_DAYS", "30"))
+
+# Autorise le bouton "Mise a jour" du dashboard (git pull + redemarrage).
+# Desactive par defaut : executer du code recupere sur le reseau depuis une
+# interface web est un vecteur d'attaque si le mot de passe fuit.
+ALLOW_REMOTE_UPDATE = os.getenv("ALLOW_REMOTE_UPDATE", "false").lower() == "true"
+
+# Autorise le declenchement de l'entrainement ML depuis le dashboard.
+ALLOW_REMOTE_TRAIN = os.getenv("ALLOW_REMOTE_TRAIN", "true").lower() == "true"
+
 # ─── Devise de cotation ──────────────────────────────────────────────────────
 # EUR obligatoire pour Binance France (MiCA — USDT restreint)
 QUOTE_CURRENCY = "EUR"

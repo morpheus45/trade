@@ -18,8 +18,11 @@ import sys
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
+from datetime import timedelta
 from flask import Flask, render_template, jsonify, send_from_directory, request
 import config
+import auth
+from auth import login_required
 from ai_chat import get_chat
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,22 @@ app = Flask(
     template_folder=str(Path(__file__).parent / "templates"),
     static_folder=str(Path(__file__).parent / "static"),
 )
+
+app.secret_key = auth.get_secret_key()
+app.permanent_session_lifetime = timedelta(days=config.SESSION_DAYS)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,   # cookie invisible pour le JavaScript de la page
+    SESSION_COOKIE_SAMESITE="Lax",  # bloque l'envoi du cookie depuis un site tiers
+    # Cookie limite au HTTPS des qu'on est derriere un tunnel/reverse proxy.
+    SESSION_COOKIE_SECURE=config.TRUST_PROXY,
+)
+
+if config.TRUST_PROXY:
+    # Sans cela, Flask voit l'IP du proxy et construit les URL en http://
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+auth.register(app)
 
 # Référence optionnelle au bot (injectée depuis bot_trading.py si lancé ensemble)
 _bot_instance = None
@@ -166,6 +185,7 @@ def _compute_stats(trades: pd.DataFrame) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/data")
+@login_required
 def api_data():
     """
     Point de données principal pour le dashboard.
@@ -269,6 +289,7 @@ def api_data():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     return render_template("dashboard.html")
 
@@ -278,11 +299,28 @@ def static_files(filename):
     return send_from_directory(app.static_folder, filename)
 
 
+@app.route("/healthz")
+def healthz():
+    """
+    Sonde de supervision (systemd, Docker, Cloudflare, uptime monitor).
+    Volontairement accessible sans mot de passe : ne revele aucune donnee
+    financiere, seulement si le process repond et si le bot tourne.
+    """
+    alive = _bot_instance is not None
+    return jsonify({
+        "status":    "ok",
+        "bot_attached": alive,
+        "paper":     config.PAPER_TRADING,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }), 200
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Chat IA
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def api_chat():
     """
     Endpoint chat IA.
@@ -316,6 +354,7 @@ def api_chat():
 
 
 @app.route("/api/chat/clear", methods=["POST"])
+@login_required
 def api_chat_clear():
     """Efface l'historique de conversation."""
     data    = request.get_json(silent=True) or {}
@@ -325,6 +364,7 @@ def api_chat_clear():
 
 
 @app.route("/api/chat/history", methods=["GET"])
+@login_required
 def api_chat_history():
     """Retourne l'historique de conversation."""
     session = request.args.get("session_id") or request.remote_addr or "default"
@@ -350,6 +390,7 @@ _train_log    = config.LOGS_DIR / "ml_train.log"
 
 
 @app.route("/api/update", methods=["POST"])
+@login_required
 def api_update():
     """
     Fait un git pull et redémarre le bot (dashboard reste actif).
@@ -357,6 +398,13 @@ def api_update():
     """
     import threading
     from pathlib import Path
+
+    if not config.ALLOW_REMOTE_UPDATE:
+        return jsonify({
+            "ok": False,
+            "message": "Mise a jour a distance desactivee "
+                       "(mettre ALLOW_REMOTE_UPDATE=true pour l'autoriser).",
+        }), 403
 
     repo_dir = Path(__file__).parent.parent
 
@@ -390,9 +438,17 @@ def api_update():
 
 
 @app.route("/api/train", methods=["POST"])
+@login_required
 def api_train():
     """Lance l'entraînement XGBoost en arrière-plan."""
     global _train_proc
+    if not config.ALLOW_REMOTE_TRAIN:
+        return jsonify({
+            "status": "disabled",
+            "message": "Entrainement a distance desactive "
+                       "(mettre ALLOW_REMOTE_TRAIN=true pour l'autoriser).",
+        }), 403
+
     with _train_lock:
         if _train_proc and _train_proc.poll() is None:
             return jsonify({"status": "running", "message": "Entraînement déjà en cours…"})
@@ -411,6 +467,7 @@ def api_train():
 
 
 @app.route("/api/train/status", methods=["GET"])
+@login_required
 def api_train_status():
     """Retourne l'état de l'entraînement et les dernières lignes de log."""
     global _train_proc
@@ -444,6 +501,7 @@ def api_train_status():
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Railway/Render injectent PORT via variable d'environnement
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port, threaded=True)
+    # Lancement direct du dashboard seul (sans le bot). En fonctionnement
+    # normal, c'est main.py qui sert cette application via un vrai serveur WSGI.
+    from server import serve
+    serve(app)

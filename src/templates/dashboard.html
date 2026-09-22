@@ -146,6 +146,8 @@
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:11px;color:var(--muted)" id="lastUpdateHeader">—</span>
     <span class="mode-badge" id="modeBadge"></span>
+    <a href="/logout" title="Se deconnecter"
+       style="color:var(--muted);text-decoration:none;font-size:16px;padding:2px 6px">⏻</a>
   </div>
 </header>
 
@@ -295,9 +297,20 @@ function initChart(labels, data) {
 }
 
 // ── Refresh données ──────────────────────────────────────────────────────────
+// Une session expiree fait repondre 401 aux endpoints /api/. Sans ce traitement,
+// la page resterait figee sur des chiffres perimes sans rien signaler.
+async function api(url, options) {
+  const r = await fetch(url, options);
+  if (r.status === 401) {
+    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+    throw new Error('session expiree');
+  }
+  return r;
+}
+
 async function refresh() {
   try {
-    const d = await fetch('/api/data').then(r => r.json());
+    const d = await api('/api/data').then(r => r.json());
 
     document.getElementById('statusDot').className = 'status-dot' + (d.paused ? ' paused' : '');
     const badge = document.getElementById('modeBadge');
@@ -452,7 +465,7 @@ async function sendMessage() {
   setTyping(true);
 
   try {
-    const res = await fetch('/api/chat', {
+    const res = await api('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, session_id: SESSION_ID }),
@@ -475,7 +488,7 @@ function sendSuggestion(text) {
 }
 
 async function clearChat() {
-  await fetch('/api/chat/clear', {
+  await api('/api/chat/clear', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: SESSION_ID }),
@@ -503,7 +516,7 @@ async function updateBot() {
   log.className = 'train-log visible';
   log.textContent = 'git pull en cours…';
   try {
-    const r = await fetch('/api/update', { method: 'POST' });
+    const r = await api('/api/update', { method: 'POST' });
     const d = await r.json();
     log.textContent = d.message || 'OK';
     btn.innerHTML = '✅ Mis à jour — redémarrage…';
@@ -532,7 +545,7 @@ async function trainModel() {
   log.textContent = 'Lancement de l\'entraînement XGBoost (~5-10 min)…';
 
   try {
-    await fetch('/api/train', { method: 'POST' });
+    await api('/api/train', { method: 'POST' });
   } catch(e) {
     log.textContent = '❌ Serveur inaccessible.';
     btn.className = 'train-btn idle';
@@ -543,7 +556,7 @@ async function trainModel() {
   // Poll status every 10 seconds
   _trainPollInterval = setInterval(async () => {
     try {
-      const r = await fetch('/api/train/status');
+      const r = await api('/api/train/status');
       const d = await r.json();
       if (d.log_tail) log.textContent = d.log_tail;
       log.scrollTop = log.scrollHeight;
@@ -565,7 +578,7 @@ async function trainModel() {
 // Si un entraînement tourne déjà au chargement, reprendre le polling
 (async () => {
   try {
-    const r = await fetch('/api/train/status');
+    const r = await api('/api/train/status');
     const d = await r.json();
     const btn = document.getElementById('trainBtn');
     const log = document.getElementById('trainLog');
@@ -576,7 +589,7 @@ async function trainModel() {
       trainModel._polling = true;
       _trainPollInterval = setInterval(async () => {
         try {
-          const r2 = await fetch('/api/train/status');
+          const r2 = await api('/api/train/status');
           const d2 = await r2.json();
           if (d2.log_tail) log.textContent = d2.log_tail;
           if (d2.status === 'done') {

@@ -1,270 +1,278 @@
-# ============================================================
-#  INSTALL.ps1 - Bot Trading - Installation complete
-#  Usage: clic droit > Executer avec PowerShell
-# ============================================================
+# =============================================================================
+#  INSTALL.ps1 — Bot de trading, installation sur une machine Windows dediee
+#
+#  Usage : clic droit sur ce fichier > "Executer avec PowerShell"
+#          (le script demande lui-meme les droits administrateur)
+#
+#  Ce qu'il fait :
+#    - installe Python et Git s'ils manquent
+#    - clone ou met a jour le depot
+#    - cree l'environnement Python et installe les dependances
+#    - genere un .env avec un mot de passe de dashboard aleatoire
+#    - empeche la machine de se mettre en veille
+#    - installe une tache planifiee qui demarre le bot AU BOOT, sans qu'une
+#      session utilisateur soit ouverte, et le relance s'il s'arrete
+# =============================================================================
 
-# --- Elevation admin automatique ---
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+#Requires -Version 5.1
+
+# --- Elevation administrateur automatique ------------------------------------
+$principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process powershell -Verb RunAs -ArgumentList `
+        "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
     exit
 }
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference    = "SilentlyContinue"
 
-$REPO_URL  = "https://github.com/morpheus45/trade.git"
-$BOT_DIR   = "$env:USERPROFILE\trading-bot"
-$VENV      = "$BOT_DIR\venv"
-$PYTHON    = "$VENV\Scripts\python.exe"
-$PIP       = "$VENV\Scripts\pip.exe"
-$LOG       = "$BOT_DIR\logs\install.log"
+$REPO_URL = "https://github.com/morpheus45/trade.git"
+$BRANCH   = "main"
+$BOT_DIR  = "$env:ProgramData\trading-bot"
+$VENV     = "$BOT_DIR\venv"
+$PYTHON   = "$VENV\Scripts\python.exe"
+$PIP      = "$VENV\Scripts\pip.exe"
+$TASK     = "TradingBot"
 
-function Log($msg) {
-    $ts = (Get-Date).ToString("HH:mm:ss")
-    $line = "[$ts] $msg"
-    Write-Host $line
-    if (Test-Path (Split-Path $LOG)) { Add-Content $LOG $line -Encoding UTF8 }
-}
-
+function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
+function Ok($msg)   { Write-Host "    OK  $msg" -ForegroundColor Green }
+function Warn($msg) { Write-Host "    !   $msg" -ForegroundColor Yellow }
 function Die($msg) {
-    Write-Host ""
-    Write-Host "ERREUR: $msg" -ForegroundColor Red
-    Write-Host "Appuie sur une touche pour fermer..."
+    Write-Host "`nERREUR : $msg" -ForegroundColor Red
+    Write-Host "`nAppuie sur une touche pour fermer..."
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }
 
 Clear-Host
-Write-Host "============================================================"
-Write-Host "  BOT TRADING - Installation complete"
-Write-Host "============================================================"
-Write-Host ""
+Write-Host "==============================================================="
+Write-Host "  BOT DE TRADING - Installation machine dediee"
+Write-Host "==============================================================="
 
-# ============================================================
+# =============================================================================
 #  1. Python
-# ============================================================
-Write-Host "[1/7] Verification Python..."
+# =============================================================================
+Step "Python"
 $pyCmd = $null
-
-foreach ($candidate in @("python","python3","py")) {
+foreach ($c in @("py", "python", "python3")) {
     try {
-        $v = & $candidate --version 2>&1
-        if ($v -match "Python 3\.(9|10|11|12)") { $pyCmd = $candidate; break }
+        $v = & $c --version 2>&1
+        # 3.13+ n'a pas encore de wheels pour toutes les dependances scientifiques
+        if ($v -match "Python 3\.(10|11|12)\.") { $pyCmd = $c; break }
     } catch {}
 }
 
 if (-not $pyCmd) {
-    Write-Host "     Python non trouve - telechargement Python 3.11..."
-    $pyInstaller = "$env:TEMP\python-3.11.9.exe"
-    Invoke-WebRequest "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe" -OutFile $pyInstaller
-    Write-Host "     Installation Python (cela prend ~2min)..."
-    Start-Process $pyInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1" -Wait
-    Remove-Item $pyInstaller -Force -ErrorAction SilentlyContinue
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","User") + ";" + [System.Environment]::GetEnvironmentVariable("Path","Machine")
-    $pyCmd = "python"
-    Write-Host "     Python installe."
-} else {
-    $ver = & $pyCmd --version 2>&1
-    Write-Host "     OK - $ver"
+    Warn "Python 3.10-3.12 introuvable - telechargement de Python 3.11..."
+    $inst = "$env:TEMP\python-3.11.9-amd64.exe"
+    Invoke-WebRequest "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe" -OutFile $inst
+    Start-Process $inst -Wait -ArgumentList `
+        "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1 Include_launcher=1"
+    Remove-Item $inst -Force -ErrorAction SilentlyContinue
+    $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [Environment]::GetEnvironmentVariable("Path","User")
+    $pyCmd = "py"
+    if (-not (Get-Command $pyCmd -ErrorAction SilentlyContinue)) {
+        Die "Python installe mais introuvable. Redemarre la machine et relance ce script."
+    }
 }
+Ok (& $pyCmd --version 2>&1)
 
-# ============================================================
+# =============================================================================
 #  2. Git
-# ============================================================
-Write-Host "[2/7] Verification Git..."
-$gitOk = $false
-try { git --version | Out-Null; $gitOk = $true } catch {}
-
-if (-not $gitOk) {
-    Write-Host "     Git non trouve - telechargement..."
-    $gitInstaller = "$env:TEMP\git-setup.exe"
-    Invoke-WebRequest "https://github.com/git-for-windows/git/releases/download/v2.45.2.windows.1/Git-2.45.2-64-bit.exe" -OutFile $gitInstaller
-    Write-Host "     Installation Git..."
-    Start-Process $gitInstaller -ArgumentList "/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=icons,ext\reg\shellhere,assoc,assoc_sh" -Wait
-    Remove-Item $gitInstaller -Force -ErrorAction SilentlyContinue
+# =============================================================================
+Step "Git"
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Warn "Git introuvable - telechargement..."
+    $inst = "$env:TEMP\git-setup.exe"
+    Invoke-WebRequest "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe" -OutFile $inst
+    Start-Process $inst -Wait -ArgumentList "/VERYSILENT /NORESTART /NOCANCEL /SP-"
+    Remove-Item $inst -Force -ErrorAction SilentlyContinue
     $env:Path += ";C:\Program Files\Git\cmd"
-    Write-Host "     Git installe."
-} else {
-    Write-Host "     OK - $(git --version)"
 }
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die "Git indisponible." }
+Ok (git --version)
 
-# ============================================================
-#  3. Clone ou mise a jour du repo
-# ============================================================
-Write-Host "[3/7] Depot GitHub..."
-
+# =============================================================================
+#  3. Code source
+# =============================================================================
+# Installe dans ProgramData et non dans le profil utilisateur : la tache
+# planifiee tourne au demarrage, avant toute ouverture de session, et n'aurait
+# alors pas acces a un dossier utilisateur (surtout si OneDrive le synchronise).
+Step "Code source dans $BOT_DIR"
 if (Test-Path "$BOT_DIR\.git") {
-    Write-Host "     Dossier existant - mise a jour..."
-    $result = git -C $BOT_DIR pull --ff-only 2>&1
-    Write-Host "     $result"
+    git -C $BOT_DIR fetch --quiet origin $BRANCH
+    git -C $BOT_DIR checkout --quiet $BRANCH
+    git -C $BOT_DIR pull --ff-only --quiet
+    Ok "depot mis a jour"
 } else {
-    Write-Host "     Clonage de $REPO_URL..."
     if (Test-Path $BOT_DIR) { Remove-Item $BOT_DIR -Recurse -Force }
-    git clone $REPO_URL $BOT_DIR 2>&1 | Write-Host
+    git clone --quiet --branch $BRANCH $REPO_URL $BOT_DIR
+    Ok "depot clone"
+}
+foreach ($d in @("data","logs","models")) {
+    New-Item -ItemType Directory -Force -Path "$BOT_DIR\$d" | Out-Null
 }
 
-New-Item -ItemType Directory -Force -Path "$BOT_DIR\logs"  | Out-Null
-New-Item -ItemType Directory -Force -Path "$BOT_DIR\models" | Out-Null
-New-Item -ItemType Directory -Force -Path "$BOT_DIR\data"   | Out-Null
-Write-Host "     OK"
-
-# ============================================================
-#  4. Environnement virtuel + dependances
-# ============================================================
-Write-Host "[4/7] Environnement Python (venv)..."
-
-if (-not (Test-Path $PYTHON)) {
-    Write-Host "     Creation du venv..."
-    & $pyCmd -m venv $VENV
-}
-
-Write-Host "     Mise a jour pip..."
+# =============================================================================
+#  4. Environnement Python
+# =============================================================================
+Step "Environnement Python"
+if (-not (Test-Path $PYTHON)) { & $pyCmd -m venv $VENV }
 & $PYTHON -m pip install --upgrade pip --quiet
-
-Write-Host "     Installation des dependances (peut prendre 3-5min)..."
+Write-Host "    Installation des dependances (3 a 6 minutes)..."
 & $PIP install -r "$BOT_DIR\requirements.txt" --quiet
-Write-Host "     OK - dependances installees"
+if ($LASTEXITCODE -ne 0) { Die "Installation des dependances echouee." }
+Ok "dependances installees"
 
-# ============================================================
-#  5. Fichier .env
-# ============================================================
-Write-Host "[5/7] Configuration .env..."
-
+# =============================================================================
+#  5. Configuration
+# =============================================================================
+Step "Configuration"
 $envFile = "$BOT_DIR\src\.env"
-if (-not (Test-Path $envFile)) {
-    Write-Host ""
-    Write-Host "     CONFIGURATION REQUISE - remplis les valeurs suivantes :"
-    Write-Host "     (Appuie Entree pour laisser vide / utiliser la valeur par defaut)"
-    Write-Host ""
+$newEnv  = $false
 
-    $binanceKey    = Read-Host "     Binance API Key"
-    $binanceSecret = Read-Host "     Binance API Secret"
-    $groqKey       = Read-Host "     Groq API Key (gratuit sur console.groq.com)"
-    $telegramToken = Read-Host "     Telegram Bot Token (optionnel)"
-    $telegramChat  = Read-Host "     Telegram Chat ID  (optionnel)"
-
-    $envContent = @"
-# Bot Trading - Configuration
-BINANCE_API_KEY=$binanceKey
-BINANCE_API_SECRET=$binanceSecret
-
-GROQ_API_KEY=$groqKey
-
-TELEGRAM_BOT_TOKEN=$telegramToken
-TELEGRAM_CHAT_ID=$telegramChat
-
-# Parametres bot
-INITIAL_CAPITAL=100
-RISK_PCT=0.05
-PAPER_TRADING=false
-"@
-    $envContent | Out-File -FilePath $envFile -Encoding UTF8
-    Write-Host "     .env cree."
+if (Test-Path $envFile) {
+    Ok ".env existant conserve"
+    $dashPw = (Select-String -Path $envFile -Pattern '^DASHBOARD_PASSWORD=(.*)$').Matches.Groups[1].Value
 } else {
-    Write-Host "     .env existant conserve."
+    Copy-Item "$BOT_DIR\src\.env.example" $envFile
+
+    # Mot de passe genere ici : 24 caracteres tires d'un generateur
+    # cryptographique, personne n'a a en inventer un.
+    $bytes = [byte[]]::new(18)
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $dashPw = [Convert]::ToBase64String($bytes).Replace('+','A').Replace('/','B').Replace('=','')
+
+    (Get-Content $envFile) -replace '^DASHBOARD_PASSWORD=.*', "DASHBOARD_PASSWORD=$dashPw" |
+        Set-Content $envFile -Encoding UTF8
+    Ok ".env cree avec un mot de passe genere"
+    $newEnv = $true
 }
 
-# ============================================================
-#  6. Tache planifiee : demarrage automatique au boot
-# ============================================================
-Write-Host "[6/7] Demarrage automatique..."
+# Seul l'administrateur et SYSTEM doivent pouvoir lire les cles API.
+icacls $envFile /inheritance:r /grant:r "SYSTEM:(R)" "Administrateurs:(F)" "Administrators:(F)" 2>&1 | Out-Null
 
-$taskName   = "TradingBot-Watchdog"
-$taskScript = @"
-Set-Location '$BOT_DIR'
-Start-Process cmd -ArgumentList '/c cd /d $BOT_DIR && $PYTHON src\run_forever.py >> logs\bot.log 2>&1' -WindowStyle Hidden
+# =============================================================================
+#  6. Empecher la mise en veille
+# =============================================================================
+# Une machine endormie ne surveille plus ses stop-loss. Le bot demande deja a
+# Windows de rester eveille, mais la politique d'alimentation prime.
+Step "Mise en veille"
+powercfg /change standby-timeout-ac 0   | Out-Null
+powercfg /change hibernate-timeout-ac 0 | Out-Null
+powercfg /change disk-timeout-ac 0      | Out-Null
+powercfg /hibernate off                 2>&1 | Out-Null
+Ok "veille et hibernation desactivees (sur secteur)"
+
+# =============================================================================
+#  7. Demarrage automatique au boot
+# =============================================================================
+# La tache tourne sous SYSTEM avec un declencheur AtStartup : le bot repart
+# apres une coupure de courant meme si personne n'ouvre de session. L'ancienne
+# version utilisait ONLOGON et restait donc a l'arret sur l'ecran de connexion.
+Step "Demarrage automatique"
+
+Unregister-ScheduledTask -TaskName $TASK -Confirm:$false -ErrorAction SilentlyContinue
+
+$action = New-ScheduledTaskAction `
+    -Execute $PYTHON `
+    -Argument "src\main.py" `
+    -WorkingDirectory $BOT_DIR
+
+$trigger   = New-ScheduledTaskTrigger -AtStartup
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" `
+                                        -LogonType ServiceAccount `
+                                        -RunLevel Highest
+
+$settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -RestartCount 999 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -MultipleInstances IgnoreNew
+
+Register-ScheduledTask -TaskName $TASK `
+                       -Action $action `
+                       -Trigger $trigger `
+                       -Principal $principal `
+                       -Settings $settings `
+                       -Description "Bot de trading crypto + dashboard" | Out-Null
+Ok "tache '$TASK' installee (demarrage au boot, relance auto)"
+
+# =============================================================================
+#  8. Demarrage
+# =============================================================================
+Step "Demarrage du bot"
+Start-ScheduledTask -TaskName $TASK
+Start-Sleep -Seconds 12
+
+$state = (Get-ScheduledTask -TaskName $TASK).State
+if ($state -eq "Running") {
+    Ok "bot en cours d'execution"
+} else {
+    Warn "etat de la tache : $state - consulte $BOT_DIR\logs\bot.log"
+}
+
+# =============================================================================
+#  Recapitulatif
+# =============================================================================
+$report = @"
+===============================================================
+  BOT DE TRADING - installation terminee
+  $(Get-Date -Format "dd/MM/yyyy HH:mm")
+===============================================================
+
+DOSSIER        $BOT_DIR
+CONFIGURATION  $envFile
+LOGS           $BOT_DIR\logs\bot.log
+
+DASHBOARD      http://127.0.0.1:5000
+MOT DE PASSE   $dashPw
+
+MODE           PAPER (simulation) - aucun ordre reel n'est passe.
+               Pour passer en reel, mettre PAPER_TRADING=false dans le .env,
+               mais seulement apres plusieurs jours d'observation en paper.
+
+COMMANDES (PowerShell administrateur)
+  Demarrer     Start-ScheduledTask  -TaskName $TASK
+  Arreter      Stop-ScheduledTask   -TaskName $TASK
+  Etat         Get-ScheduledTask    -TaskName $TASK
+  Logs         Get-Content "$BOT_DIR\logs\bot.log" -Tail 50 -Wait
+
+ACCES DEPUIS LE TELEPHONE
+  Lance : powershell -ExecutionPolicy Bypass -File "$BOT_DIR\deploy\windows\setup-tunnel.ps1"
+
+===============================================================
 "@
-$taskScriptPath = "$BOT_DIR\start_bot.ps1"
-$taskScript | Out-File -FilePath $taskScriptPath -Encoding UTF8
 
-schtasks /delete /tn $taskName /f 2>$null | Out-Null
-schtasks /create /tn $taskName `
-    /tr "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$taskScriptPath`"" `
-    /sc ONLOGON /rl HIGHEST /f 2>&1 | Out-Null
-Write-Host "     OK - bot demarre automatiquement a chaque connexion"
-
-# ============================================================
-#  7. Tache planifiee : mise a jour automatique toutes les 30min
-# ============================================================
-Write-Host "[7/7] Mise a jour automatique (toutes les 30min)..."
-
-$updateScript = @"
-# Auto-update : git pull + redemarrage si nouveau code
-Set-Location '$BOT_DIR'
-`$before = git rev-parse HEAD 2>`$null
-git pull --ff-only 2>`$null | Out-Null
-`$after  = git rev-parse HEAD 2>`$null
-if (`$before -ne `$after) {
-    Add-Content '$BOT_DIR\logs\autoupdate.log' "[(Get-Date)] Mise a jour appliquee - redemarrage bot"
-    Start-Sleep 2
-    Stop-Process -Name python -Force -ErrorAction SilentlyContinue
-    Start-Sleep 3
-    Start-Process cmd -ArgumentList '/c cd /d $BOT_DIR && $PYTHON src\run_forever.py >> logs\bot.log 2>&1' -WindowStyle Hidden
+$reportPath = "$env:PUBLIC\Desktop\BOT_INFO.txt"
+try { $report | Out-File -FilePath $reportPath -Encoding UTF8 } catch {
+    $reportPath = "$BOT_DIR\BOT_INFO.txt"
+    $report | Out-File -FilePath $reportPath -Encoding UTF8
 }
-"@
-$updateScriptPath = "$BOT_DIR\auto_update.ps1"
-$updateScript | Out-File -FilePath $updateScriptPath -Encoding UTF8
-
-$updateTask = "TradingBot-AutoUpdate"
-schtasks /delete /tn $updateTask /f 2>$null | Out-Null
-schtasks /create /tn $updateTask `
-    /tr "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$updateScriptPath`"" `
-    /sc MINUTE /mo 30 /rl HIGHEST /f 2>&1 | Out-Null
-Write-Host "     OK - mise a jour auto toutes les 30 minutes"
-
-# ============================================================
-#  Demarrage immediat du bot
-# ============================================================
-Write-Host ""
-Write-Host "Demarrage du bot..."
-Stop-Process -Name python -Force -ErrorAction SilentlyContinue
-Start-Sleep 2
-Start-Process cmd -ArgumentList "/c cd /d $BOT_DIR && $PYTHON src\run_forever.py >> logs\bot.log 2>&1" -WindowStyle Hidden
-Start-Sleep 5
-
-# ============================================================
-#  Rapport final
-# ============================================================
-$localIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch "^(127\.|169\.)" -and $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1).IPAddress
-
-$tailIP = try { & "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null } catch { "non connecte" }
-
-$reportPath = "$env:USERPROFILE\Desktop\BOT_INFO.txt"
-@"
-============================================================
-  BOT TRADING - INSTALLATION COMPLETE
-  $(Get-Date)
-============================================================
-
-ACCES DASHBOARD :
-  LAN (meme reseau) : http://${localIP}:5000
-  Tailscale (partout): http://${tailIP}:5000
-
-MISES A JOUR :
-  Automatique toutes les 30min via GitHub
-  Manuelle : double-clic sur INSTALL.ps1
-
-LOGS :
-  Bot      : $BOT_DIR\logs\bot.log
-  Watchdog : $BOT_DIR\logs\watchdog.log
-  Updates  : $BOT_DIR\logs\autoupdate.log
-
-TACHES PLANIFIEES :
-  TradingBot-Watchdog   - demarre au login
-  TradingBot-AutoUpdate - git pull toutes les 30min
-
-============================================================
-"@ | Out-File -FilePath $reportPath -Encoding UTF8
 
 Write-Host ""
-Write-Host "============================================================"
-Write-Host "  INSTALLATION TERMINEE !"
-Write-Host "  Dashboard : http://${localIP}:5000"
-if ($tailIP -ne "non connecte") {
-    Write-Host "  Tailscale  : http://${tailIP}:5000"
+Write-Host $report
+Write-Host "Recapitulatif enregistre : $reportPath" -ForegroundColor Cyan
+
+if ($newEnv) {
+    Write-Host ""
+    Write-Host "ETAPE SUIVANTE — renseigne tes cles :" -ForegroundColor Yellow
+    Write-Host "  notepad $envFile"
+    Write-Host ""
+    Write-Host "  BINANCE_API_KEY / BINANCE_API_SECRET"
+    Write-Host "    Sur Binance, autorise 'Lecture' + 'Spot Trading'."
+    Write-Host "    N'autorise JAMAIS les retraits." -ForegroundColor Yellow
+    Write-Host "  GROQ_API_KEY                (optionnel, gratuit)"
+    Write-Host "  TELEGRAM_BOT_TOKEN / _CHAT_ID (optionnel)"
+    Write-Host ""
+    Write-Host "  Puis : Stop-ScheduledTask -TaskName $TASK ; Start-ScheduledTask -TaskName $TASK"
 }
-Write-Host "  Rapport   : BOT_INFO.txt sur le bureau"
-Write-Host "============================================================"
+
 Write-Host ""
 Write-Host "Appuie sur une touche pour fermer..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

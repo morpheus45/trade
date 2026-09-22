@@ -43,7 +43,7 @@ from claude_analysis import ClaudeAnalyst
 from indicators import add_all_indicators
 import telegram_alerts as tg
 import telegram_controller as tg_ctrl
-from github_reporter import GitHubReporter
+from state_store import StateStore
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -74,19 +74,30 @@ class TradingBot:
         logger.info("=" * 60)
 
         self.exchange   = Exchange()
-        self.portfolio  = PortfolioManager(initial_capital=self._get_initial_capital())
+
+        # L'etat persiste est lu AVANT tout appel a l'exchange : apres un
+        # redemarrage on repart du capital deja connu au lieu d'en redemander un
+        # nouveau (et, en LIVE, sans bloquer 3 minutes si l'API repond mal).
+        self.state      = StateStore()
+        saved           = self.state.load()
+
+        self.portfolio  = PortfolioManager(initial_capital=self._resolve_initial_capital(saved))
         self.ai_model   = AIModel()
         self.claude     = ClaudeAnalyst()
         self.cb         = CircuitBreaker(self.portfolio.initial_capital)
         self.trailing   = TrailingStopManager()
-        self.reporter = GitHubReporter(config.BASE_DIR, self.portfolio)
-        self.reporter.start()
+        self.last_briefing = ""
 
         self._last_day          = datetime.now(timezone.utc).day
-        # Initialiser à l'heure actuelle pour éviter un snapshot immédiat au démarrage
-        # (évite les doublons si plusieurs processus démarrent simultanément)
+        # Initialiser a l'heure actuelle pour eviter un snapshot immediat au demarrage
+        # (evite les doublons si plusieurs processus demarrent simultanement)
         self._last_stats_hour   = datetime.now(timezone.utc).hour
         self._last_scan: dict = {}
+
+        # Positions ouvertes, solde, historique, trailing stops et circuit breaker
+        # sont remis en place ici. Sans cela, un reboot en pleine position LIVE
+        # laisse un ordre reel sur Binance que le bot ne gerera plus jamais.
+        self.state.restore(self)
 
         claude_status = "actif" if self.claude.enabled else "désactivé"
         logger.info(f"Claude: {claude_status}")
@@ -94,13 +105,50 @@ class TradingBot:
         # Lancer le contrôleur Telegram (commandes /status /pause etc.)
         self._tg_ctrl_thread = tg_ctrl.start_controller(self)
 
+    def _resolve_initial_capital(self, saved: dict | None) -> float:
+        """
+        Capital initial de reference.
+
+        Si un etat a deja ete sauvegarde dans le meme mode (paper ou live), on
+        reprend son capital initial : c'est la base de calcul du ROI et du
+        circuit breaker, elle ne doit pas bouger a chaque redemarrage.
+        Sinon on retombe sur la determination classique.
+        """
+        if saved and bool(saved.get("paper_trading")) == bool(config.PAPER_TRADING):
+            cap = saved.get("portfolio", {}).get("initial_capital")
+            try:
+                cap = float(cap)
+            except (TypeError, ValueError):
+                cap = 0.0
+            if cap > 0:
+                logger.info(
+                    f"Capital initial repris de l'etat sauvegarde : "
+                    f"{cap:.2f} {config.QUOTE_CURRENCY}"
+                )
+                return cap
+        return self._get_initial_capital()
+
+    def is_paused(self) -> bool:
+        """Etat de pause courant (pilote par Telegram ou le dashboard)."""
+        with _LOCK:
+            return _PAUSED
+
     def _get_initial_capital(self) -> float:
         if config.PAPER_TRADING:
-            try:
-                cap = float(open(config.BASE_DIR / "initial_capital.txt").read().strip())
-            except Exception:
-                cap = 1000.0
-            logger.info(f"Capital initial (paper): {cap:.2f} {config.QUOTE_CURRENCY}")
+            cap = config.INITIAL_CAPITAL
+            source = "INITIAL_CAPITAL"
+            if not cap:
+                # Repli historique : fichier a la racine du depot.
+                try:
+                    cap = float((config.BASE_DIR / "initial_capital.txt").read_text().strip())
+                    source = "initial_capital.txt"
+                except Exception:
+                    cap = 1000.0
+                    source = "valeur par defaut"
+            logger.info(
+                f"Capital initial (paper): {cap:.2f} {config.QUOTE_CURRENCY} "
+                f"(source: {source})"
+            )
             return cap
         else:
             for attempt in range(6):
@@ -155,6 +203,7 @@ class TradingBot:
                         f"PnL: {trade['pnl_usdt']:+.4f} {config.QUOTE_CURRENCY}"
                     )
                     logger.info(f"[TP Partiel] {pair} — trailing actif sur le reste")
+                    self.state.save(self, force=True)
                 continue
 
             # ── Stop-loss ou TP final ─────────────────────────────────────
@@ -176,6 +225,7 @@ class TradingBot:
                     tg.alert_sell_close(pair, trade["pnl_usdt"], trade["pnl_pct"],
                                         reason, config.PAPER_TRADING)
                 self.trailing.remove(pair)
+                self.state.save(self, force=True)
 
     # ─── Recherche de nouvelles entrées ──────────────────────────────────────
 
@@ -305,6 +355,9 @@ class TradingBot:
 
             if opened:
                 self.trailing.init_position(pair, fill_price, stop)
+                # Sauver avant toute notification : si le process meurt juste
+                # apres l'ordre, la position doit deja etre sur le disque.
+                self.state.save(self, force=True)
                 tg.alert_buy(pair, qty, fill_price, stop, tp, config.PAPER_TRADING)
                 detail = (
                     f"Score: {signal_score}/5 | ML: {ml_conf:.0%} | "
@@ -329,10 +382,7 @@ class TradingBot:
             if self.claude.enabled:
                 briefing = self.claude.daily_market_briefing(config.TRADE_PAIRS, stats)
                 tg._send(f"📰 *Briefing du jour*\n{briefing}")
-                self.reporter.update_context(
-                    {},
-                    claude_analysis=briefing if briefing else "",
-                )
+                self.last_briefing = briefing or ""
 
             logger.info(f"[DAILY RESET] Stats: {stats}")
 
@@ -344,7 +394,7 @@ class TradingBot:
             log_portfolio_snapshot(self.portfolio.quote_balance, total,
                                    len(self.portfolio.positions))
             self.cb.update(total)
-            self.reporter.update_context(prices)
+            self.state.save(self, force=True)
 
     # ─── Boucle principale ────────────────────────────────────────────────────
 
@@ -388,12 +438,17 @@ class TradingBot:
                 logger.exception(f"Erreur boucle: {e}")
                 time.sleep(10)
 
+            # Filet de securite : capture aussi les deplacements de trailing stop,
+            # qui ne passent par aucun des points de sauvegarde ci-dessus.
+            self.state.save(self, min_interval=60)
+
             elapsed    = time.time() - loop_start
             sleep_time = max(0, config.LOOP_INTERVAL_SECONDS - elapsed)
             logger.debug(f"Itération {elapsed:.1f}s. Pause {sleep_time:.1f}s.")
             time.sleep(sleep_time)
 
         # Arrêt propre
+        self.state.save(self, force=True)
         prices = {p: self.exchange.get_price(p) or 0 for p in config.TRADE_PAIRS}
         stats  = self.portfolio.stats()
         logger.info(f"Stats finales: {stats}")

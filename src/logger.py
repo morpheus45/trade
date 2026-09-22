@@ -9,8 +9,21 @@ from pathlib import Path
 import config
 
 
+_CONFIGURED = False
+
+
 def setup_logging() -> logging.Logger:
-    """Configure le logger global et retourne le logger root."""
+    """
+    Configure le logger global et retourne le logger root.
+
+    Idempotent : main.py appelle cette fonction, et bot_trading.py l'appelle
+    aussi a l'import. Sans ce garde-fou, les handlers seraient ajoutes deux fois
+    et chaque ligne apparaitrait en double dans la console comme dans bot.log.
+    """
+    global _CONFIGURED
+    if _CONFIGURED:
+        return logging.getLogger()
+
     import time
     config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_file = config.LOGS_DIR / "bot.log"
@@ -46,6 +59,7 @@ def setup_logging() -> logging.Logger:
     root.addHandler(fh)
     root.addHandler(ch)
 
+    _CONFIGURED = True
     return root
 
 

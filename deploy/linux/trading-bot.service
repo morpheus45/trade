@@ -1,0 +1,50 @@
+[Unit]
+Description=Bot de trading crypto (bot + dashboard)
+Documentation=https://github.com/morpheus45/trade
+# Le bot a besoin du reseau pour joindre Binance des la premiere seconde.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/venv/bin/python __APP_DIR__/src/main.py
+
+# ── Redemarrage ──────────────────────────────────────────────────────────────
+# Toujours relancer : c'est ce qui remplace le watchdog maison. L'etat etant
+# persiste sur disque, le bot reprend ses positions ouvertes au redemarrage.
+Restart=always
+RestartSec=15
+# Si le bot crashe en boucle (10 fois en 10 min), arreter plutot que de marteler
+# l'API Binance : un probleme de configuration ne se resout pas tout seul.
+StartLimitIntervalSec=600
+StartLimitBurst=10
+
+# Laisse au bot le temps de sauvegarder son etat avant le SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# ── Journalisation ───────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-bot
+
+# ── Durcissement ─────────────────────────────────────────────────────────────
+# Limite les degats en cas de faille : le process ne voit qu'un /tmp prive,
+# ne peut pas ecrire ailleurs que dans son dossier, et ne peut pas obtenir
+# de privileges supplementaires.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__APP_DIR__/data __APP_DIR__/logs __APP_DIR__/models
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

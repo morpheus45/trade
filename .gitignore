@@ -45,3 +45,12 @@ Thumbs.db
 
 # Capital initial (info privée)
 initial_capital.txt
+
+# Etat persiste du bot (positions, solde, cle de session)
+data/state.json
+data/state.corrupt-*.json
+data/secret_key
+
+# Tests
+tests/__pycache__/
+.pytest_cache/

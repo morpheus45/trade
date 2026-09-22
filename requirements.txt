@@ -1,12 +1,23 @@
 # Bot de trading — dépendances Python
+
+# --- Marché / exécution ---
 ccxt>=4.2.0
 pandas>=2.0.0
 numpy>=1.24.0
+
+# --- Modèle ML ---
 xgboost>=2.0.0
 scikit-learn>=1.3.0
+
+# --- Dashboard ---
 flask>=3.0.0
+waitress>=3.0.0          # serveur WSGI de production (fonctionne sous Windows)
+
+# --- Divers ---
 requests>=2.31.0
 python-dotenv>=1.0.0
+feedparser>=6.0.0
+
+# --- IA (optionnel : le bot tourne sans, en mode dégradé) ---
 groq>=0.9.0
 anthropic>=0.50.0
-feedparser>=6.0.0

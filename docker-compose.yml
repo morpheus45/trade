@@ -1,0 +1,54 @@
+# Bot de trading + dashboard, avec tunnel Cloudflare optionnel.
+#
+#   docker compose up -d            -> bot seul, dashboard sur 127.0.0.1:5000
+#   docker compose --profile tunnel up -d   -> + URL HTTPS publique
+#
+# Les donnees (positions ouvertes, historique, sessions) vivent dans ./data et
+# ./logs sur la machine hote : elles survivent a `docker compose down`, a une
+# mise a jour de l'image et a un redemarrage de la machine.
+
+services:
+  bot:
+    build: .
+    image: trading-bot:latest
+    container_name: trading-bot
+    restart: unless-stopped
+
+    env_file:
+      - src/.env
+
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Le modele entraine depuis le dashboard doit survivre au conteneur.
+      - ./models:/app/models
+
+    ports:
+      # Publie UNIQUEMENT sur la boucle locale de la machine hote. L'acces depuis
+      # l'exterieur passe par le tunnel ci-dessous, jamais par une ouverture de
+      # port sur la box. Pour un acces LAN direct, remplacer par "5000:5000"
+      # (et s'assurer que DASHBOARD_PASSWORD est bien defini).
+      - "127.0.0.1:5000:5000"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"    # sans cela, les logs finissent par saturer le disque
+        max-file: "5"
+
+  # ── URL HTTPS publique sans ouvrir le moindre port sur la box ────────────────
+  # Prerequis : avoir cree un tunnel sur https://one.dash.cloudflare.com
+  # et place son jeton dans src/.env sous TUNNEL_TOKEN.
+  # Cote Cloudflare, le service du tunnel doit pointer sur http://bot:5000
+  # (nom du service compose, pas localhost).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: trading-bot-tunnel
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    # cloudflared lit le jeton dans la variable TUNNEL_TOKEN fournie par env_file.
+    command: tunnel --no-autoupdate run
+    env_file:
+      - src/.env
+    depends_on:
+      - bot
